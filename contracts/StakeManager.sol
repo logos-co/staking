@@ -9,6 +9,10 @@ contract StakeManager is ERC20 {
     address stakedToken;
     
     bytes32 vaultCodehash;
+    uint256 mp_supply = 0;
+    uint256 public constant MP_APY = 1; 
+    uint256 public constant STAKE_APY = 1; 
+    uint256 public constant MAX_BOOST = 1; 
 
     mapping (address => Account) account;
 
@@ -18,7 +22,7 @@ contract StakeManager is ERC20 {
     }
 
     function join(uint256 amount) external onlyVault {
-        stakedToken.transferFrom(msg.sender, )
+
     }
 
     function lock(uint256 amount, uint256 time) external onlyVault {
@@ -33,6 +37,14 @@ contract StakeManager is ERC20 {
 
     }
 
+    function getRewardsEmissions() public view returns(uint256){
+
+    }
+    
+
+    function increase_mp(uint256 amount) {
+        
+    }
 
 
 
