@@ -92,13 +92,17 @@ contract StakeManager is ERC20 {
         require(_limitEpoch <= currentEpoch, "Epoch not reached");
         uint256 userEpoch = account[_vault].epoch
         require(_limitEpoch > userEpoch, "Epoch already claimed");
+
+        uint256 totalShare = this.totalSupply + this.multiplierSupply;
+        uint256 userShare = accounts[_vault].balance + accounts[_vault].multiplier;
+        uint256 userRatio = userShare / totalShare; //TODO: might lose precision, multiply by 100 and divide back later?
+
         for (; userEpoch < _limitEpoch; userEpoch++) {
-            userReward += getRewardsEmissions(_vault, epoch[epoch].totalReward);
+            userReward += userRatio * epoch[epoch].totalReward;
         }
         account[_vault].epoch = userEpoch;
         pendingReward -= userReward;
         stakedToken.transfer(_vault, userReward);
-
     }
 
     function calcInitialMultiplierPoints(uint256 _amount, uint256 _time) pure public returns(uint256) {
@@ -110,14 +114,5 @@ contract StakeManager is ERC20 {
         uint256 newMp = accured + _currentMp;
         return newMp > MAX_MP ? MAX_MP - newMp : accurred;
     }
-
-
-    function getRewardsEmissions(address _vault, uint256 _totalReward) public view returns(uint256){
-        uint256 totalShare = this.totalSupply + this.multiplierSupply;
-        uint256 userShare = accounts[_vault].balance + accounts[_vault].multiplier;
-        return (userShare / totalShare) * _totalReward; //TODO: might lose precision, multiply by 100 and divide back later? 
-    }
-
-
 
 }
