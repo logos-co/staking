@@ -87,8 +87,15 @@ contract StakeManager is ERC20 {
 
     }
 
-    function executeUserReward(uint256 _epoch, address _vault) external {
-        uint256 userReward = getRewardsEmissions(_vault, epoch[_epoch].totalReward);
+    function executeUserReward(address _vault, uint256 _limitEpoch) external {
+        uint256 userReward;
+        require(_limitEpoch <= currentEpoch, "Epoch not reached");
+        uint256 userEpoch = account[_vault].epoch
+        require(_limitEpoch > userEpoch, "Epoch already claimed");
+        for (; userEpoch < _limitEpoch; userEpoch++) {
+            userReward += getRewardsEmissions(_vault, epoch[epoch].totalReward);
+        }
+        account[_vault].epoch = userEpoch;
         pendingReward -= userReward;
         stakedToken.transfer(_vault, userReward);
 
