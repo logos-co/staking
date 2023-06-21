@@ -8,7 +8,7 @@ contract StakeManager is ERC20 {
 
     ERC20 stakedToken;
 
-   uint256 public constant MP_APY = 1; 
+    uint256 public constant MP_APY = 1; 
     uint256 public constant STAKE_APY = 1; 
     uint256 public constant MAX_BOOST = 1; 
     uint256 public constant MAX_MP = 1; 
@@ -69,9 +69,10 @@ contract StakeManager is ERC20 {
     }
 
 
-    function getRewardsEmissions() public view returns(uint256){
-        uint256 totalStaked = this.totalSupply;
-        uint256 share = this.multiplierSupply +totalSupply;
+    function getRewardsEmissions(address _vault, uint256 _totalReward) public view returns(uint256){
+        uint256 totalShare = this.totalSupply + this.multiplierSupply;
+        uint256 userShare = accounts[_vault].balance + accounts[_vault].multiplier;
+        return (userShare / totalShare) * _totalReward;  
     }
 
 
