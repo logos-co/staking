@@ -33,7 +33,7 @@ contract StakeManager is ERC20 {
     uint256 public constant EPOCH_SIZE = 1 week;
 
     mapping (uint256 => Epoch) epoch;
-    mapping (address => Account) account;
+    mapping (address => Account) accounts;
 
 
     constructor() {
@@ -42,25 +42,28 @@ contract StakeManager is ERC20 {
     }
 
     function increaseBalance(uint256 _amount, uint256 _time) external {
-        accounts[msg.sender].balance += _amount;
+        Account storage account = accounts[msg.sender];
+        account.balance += _amount;
         uint256 mp = calcInitialMultiplierPoints(_amount, _time);
-        accounts[msg.sender].multiplier += mp;
+        account.multiplier += mp;
         multiplierSupply += mp;
-        accounts[msg.sender].update = now();
-        accounts[msg.sender].lockTime = now() + _time;
+        account.update = now();
+        account.lockTime = now() + _time;
         mint(msg.sender, _amount);
     }
 
     function decreaseBalance(uint256 _amount) external {
-        accounts[msg.sender].balance -= _amount;
-        accounts[msg.sender].multiplier -= calcInitialMultiplierPoints(_amount, 1);
+        Account storage account = accounts[msg.sender];
+        account.balance -= _amount;
+        account.multiplier -= calcInitialMultiplierPoints(_amount, 1);
         burn(msg.sender, _amount);
     }
 
 
     function balanceLock(uint256 _time) external {
-        require(now() + _time > accounts[msg.sender].lockTime, "Cannot decrease lock time");
-        accounts[msg.sender].lockTime =  now() + _time;
+        Account storage account = accounts[msg.sender];
+        require(now() + _time > account.lockTime, "Cannot decrease lock time");
+        account.lockTime =  now() + _time;
     }
 
     /**
@@ -68,11 +71,12 @@ contract StakeManager is ERC20 {
      * @param _vault 
      */
     function mintMultiplierPoints(address _vault) external {
-        uint256 dT = now() - accounts[msg.sender].update; 
-        accounts[msg.sender].update = now();
-        uint256 mp = calcAccuredMultiplierPoints(accounts[_vault].balance, accounts[_vault].multiplier, dT);
+        Account storage account = accounts[msg.sender];
+        uint256 dT = now() - account.update; 
+        account.update = now();
+        uint256 mp = calcAccuredMultiplierPoints(account.balance, account.multiplier, dT);
         multiplierSupply += mp;
-        accounts[_vault].multiplier += mp;
+        account.multiplier += mp;
     }
 
     function executeEpochReward() external {
@@ -81,26 +85,24 @@ contract StakeManager is ERC20 {
             epoch[currentEpoch].totalReward = epochReward;
             pendingReward += epochReward;
             currentEpoch++;
-            
             epoch[currentEpoch].startTime = now();
         }
 
     }
 
     function executeUserReward(address _vault, uint256 _limitEpoch) external {
+        Account storage account = accounts[msg.sender];
         uint256 userReward;
+        uint256 userEpoch = account.epoch
         require(_limitEpoch <= currentEpoch, "Epoch not reached");
-        uint256 userEpoch = account[_vault].epoch
         require(_limitEpoch > userEpoch, "Epoch already claimed");
-
         uint256 totalShare = this.totalSupply + this.multiplierSupply;
-        uint256 userShare = accounts[_vault].balance + accounts[_vault].multiplier;
+        uint256 userShare = account.balance + account.multiplier;
         uint256 userRatio = userShare / totalShare; //TODO: might lose precision, multiply by 100 and divide back later?
-
         for (; userEpoch < _limitEpoch; userEpoch++) {
-            userReward += userRatio * epoch[epoch].totalReward;
+            userReward += userRatio * epoch[userEpoch].totalReward;
         }
-        account[_vault].epoch = userEpoch;
+        account.epoch = userEpoch;
         pendingReward -= userReward;
         stakedToken.transfer(_vault, userReward);
     }
