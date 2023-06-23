@@ -6,14 +6,6 @@ import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
 contract StakeManager is ERC20 {
 
-    ERC20 stakedToken;
-
-    uint256 public constant MP_APY = 1; 
-    uint256 public constant STAKE_APY = 1; 
-    uint256 public constant MAX_BOOST = 1; 
-    uint256 public constant MAX_MP = 1; 
-    mapping (address => Account) accounts;
-
     struct Account {
         uint256 lockUntil;
         uint256 balance;
@@ -27,15 +19,23 @@ contract StakeManager is ERC20 {
         uint256 totalReward;    
     }
 
+    uint256 public constant EPOCH_SIZE = 1 week;
+    uint256 public constant MP_APY = 1; 
+    uint256 public constant STAKE_APY = 1; 
+    uint256 public constant MAX_BOOST = 1; 
+    uint256 public constant MAX_MP = 1; 
+
+    mapping (address => Account) accounts;
+    mapping (uint256 => Epoch) epoch;
+
+    ERC20 stakedToken;
     uint256 currentEpoch;
     uint256 pendingReward;
     uint256 public totalSupply;
     
-    uint256 public constant EPOCH_SIZE = 1 week;
 
-    mapping (uint256 => Epoch) epoch;
-    mapping (address => Account) accounts;
 
+  
 
     constructor() {
         epoch[0].startTime = now();
