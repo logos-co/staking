@@ -3,8 +3,9 @@
 pragma solidity 0.8.19;
 
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
 
-contract StakeManager is Controlled {
+contract StakeManager is Ownable {
 
     struct Account {
         uint256 lockUntil;
@@ -33,6 +34,8 @@ contract StakeManager is Controlled {
     uint256 currentEpoch;
     uint256 pendingReward;
     uint256 public totalSupply;
+    StakeManager public migration;
+    StakeManager public oldManager;
 
     modifier onlyVault {
         require(isVault[msg.sender.codehash], "Not a vault")
@@ -48,7 +51,7 @@ contract StakeManager is Controlled {
      * @param _amount Amount of balance to be decreased.
      * @param _time Seconds from now() to lock balance.
      */
-    function increaseBalance(uint256 _amount, uint256 _time) external {
+    function join(uint256 _amount, uint256 _time) external {
         Account storage account = accounts[msg.sender];
         uint256 increasedMultiplier = _amount * (_time + 1);
         account.balance += _amount;
@@ -64,7 +67,7 @@ contract StakeManager is Controlled {
      * Decreases balance of msg.sender;
      * @param _amount Amount of balance to be decreased
      */
-    function decreaseBalance(uint256 _amount) external {
+    function leave(uint256 _amount) external {
         Account storage account = accounts[msg.sender];
         uint256 reducedMultiplier = (_amount * account.multiplier) / account.balance;
         account.multiplier -= reducedMultiplier;
@@ -78,7 +81,7 @@ contract StakeManager is Controlled {
      * @notice Locks entire balance for more amount of time.
      * @param _time amount of time to lock from now.
      */
-    function balanceLock(uint256 _time) external {
+    function lock(uint256 _time) external {
         Account storage account = accounts[msg.sender];
         require(now() + _time > account.lockUntil, "Cannot decrease lock time");
 
@@ -146,9 +149,24 @@ contract StakeManager is Controlled {
      * @notice Enables a contract class to interact with staking functions
      * @param _codehash bytecode hash of contract
      */
-    function setVault(bytes32 _codehash) external onlyController {
+    function setVault(bytes32 _codehash) external onlyOwner {
         isVault[_codehash] = true;  
     }
+
+    function migrate() external onlyVault returns (address migration) {
+        require(migration != address(0), "Migration not available");
+        Account storage account = accounts[msg.sender];
+        stakedToken.approve(migration, account.balance);
+        migration.migrate(msg.sender, account);
+        delete account;
+        
+    }
+
+    function migrate(address _vault, Account memory _account) external {
+        require(msg.sender == oldManager, "Unauthorized");
+        stakedToken.transferFrom(oldManager, _account.balance, _amount);
+        accounts[_vault] = _account
+;    }
 
     function checkMaxMultiplier(uint256 _increasedMultiplier, uint256 _currentMp) private view returns(uint256 _maxToIncrease) {
         uint256 newMp = _increasedMultiplier + _currentMp;
