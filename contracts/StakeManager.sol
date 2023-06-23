@@ -20,7 +20,7 @@ contract StakeManager is Ownable {
         uint256 totalReward;    
     }
 
-    uint256 public constant EPOCH_SIZE = 1 week;
+    uint256 public constant EPOCH_SIZE = 1 weeks;
     uint256 public constant MP_APY = 1; 
     uint256 public constant STAKE_APY = 1; 
     uint256 public constant MAX_BOOST = 1; 
@@ -30,34 +30,37 @@ contract StakeManager is Ownable {
     mapping (uint256 => Epoch) epoch;
     mapping (bytes32 => bool) isVault;
 
-    ERC20 stakedToken;
+    
     uint256 currentEpoch;
     uint256 pendingReward;
+    uint256 public multiplierSupply;
     uint256 public totalSupply;
     StakeManager public migration;
-    StakeManager public oldManager;
-
+    StakeManager public immutable oldManager;
+    ERC20 public immutable stakedToken;
     modifier onlyVault {
-        require(isVault[msg.sender.codehash], "Not a vault")
+        require(isVault[msg.sender.codehash], "Not a vault");
         _;
     }
 
-    constructor() {
-        epoch[0].startTime = now();
+    constructor(ERC20 _stakedToken, StakeManager _oldManager) Ownable()  {
+        epoch[0].startTime = block.timestamp;
+        oldManager = _oldManager;
+        stakedToken = _stakedToken;
     }
 
     /**
      * Increases balance of msg.sender;
      * @param _amount Amount of balance to be decreased.
-     * @param _time Seconds from now() to lock balance.
+     * @param _time Seconds from block.timestamp to lock balance.
      */
     function join(uint256 _amount, uint256 _time) external {
         Account storage account = accounts[msg.sender];
         uint256 increasedMultiplier = _amount * (_time + 1);
         account.balance += _amount;
-        account.multiplier += mp;
-        account.lastAccured = now();
-        account.lockUntil = now() + _time;
+        account.multiplier += increasedMultiplier;
+        account.lastAccured = block.timestamp;
+        account.lockUntil = block.timestamp + _time;
 
         multiplierSupply += increasedMultiplier;
         totalSupply += _amount;
@@ -83,12 +86,12 @@ contract StakeManager is Ownable {
      */
     function lock(uint256 _time) external {
         Account storage account = accounts[msg.sender];
-        require(now() + _time > account.lockUntil, "Cannot decrease lock time");
+        require(block.timestamp + _time > account.lockUntil, "Cannot decrease lock time");
 
         //if balance still locked, multipliers must be minted from difference of time.
-        uint256 dT = account.lockUntil > now() ? now() + _time - account.lockUntil : _time); 
-        account.lockUntil =  now() + _time;
-        uint256 increasedMultiplier = _amount * dT;
+        uint256 dT = account.lockUntil > block.timestamp ? block.timestamp + _time - account.lockUntil : _time; 
+        account.lockUntil =  block.timestamp + _time;
+        uint256 increasedMultiplier = account.balance * dT;
 
         account.multiplier += increasedMultiplier;
         multiplierSupply += increasedMultiplier;
@@ -100,11 +103,11 @@ contract StakeManager is Ownable {
      */
     function mintMultiplierPoints(address _vault) external {
         Account storage account = accounts[msg.sender];
-        uint256 lastCall = now() - account.lastAccured; 
+        uint256 lastCall = block.timestamp - account.lastAccured; 
         uint256 increasedMultiplier = checkMaxMultiplier(
             account.balance * (MP_APY * lastCall),  
             account.multiplier);
-        account.lastAccured = now();
+        account.lastAccured = block.timestamp;
         account.multiplier += increasedMultiplier;
         multiplierSupply += increasedMultiplier;
     }
@@ -113,12 +116,12 @@ contract StakeManager is Ownable {
      * @notice Release rewards for current epoch and increase epoch.
      */
     function executeEpochReward() external {
-        if(now() > epoch[currentEpoch].startTime + EPOCH_SIZE){
-            uint256 epochReward = stakedToken.balanceOf(this) - pendingReward;
+        if(block.timestamp > epoch[currentEpoch].startTime + EPOCH_SIZE){
+            uint256 epochReward = stakedToken.balanceOf(address(this)) - pendingReward;
             epoch[currentEpoch].totalReward = epochReward;
             pendingReward += epochReward;
             currentEpoch++;
-            epoch[currentEpoch].startTime = now();
+            epoch[currentEpoch].startTime = block.timestamp;
         }
 
     }
@@ -126,15 +129,15 @@ contract StakeManager is Ownable {
     /**
      * @notice Execute rewards for account until limit has reached
      * @param _vault Referred account
-     * @param _limit Until what epoch it should be executed
+     * @param _limitEpoch Until what epoch it should be executed
      */
     function executeUserReward(address _vault, uint256 _limitEpoch) external {
         Account storage account = accounts[msg.sender];
         uint256 userReward;
-        uint256 userEpoch = account.epoch
+        uint256 userEpoch = account.epoch;
         require(_limitEpoch <= currentEpoch, "Epoch not reached");
         require(_limitEpoch > userEpoch, "Epoch already claimed");
-        uint256 totalShare = this.totalSupply + this.multiplierSupply;
+        uint256 totalShare = totalSupply + multiplierSupply;
         uint256 userShare = account.balance + account.multiplier;
         uint256 userRatio = userShare / totalShare; //TODO: might lose precision, multiply by 100 and divide back later?
         for (; userEpoch < _limitEpoch; userEpoch++) {
@@ -152,18 +155,27 @@ contract StakeManager is Ownable {
     function setVault(bytes32 _codehash) external onlyOwner {
         isVault[_codehash] = true;  
     }
-
-    function migrate() external onlyVault returns (address migration) {
-        require(migration != address(0), "Migration not available");
+    /**
+     * @notice Migrate account to new manager.
+     */
+    function migrate() external onlyVault returns (StakeManager newManager) {
+        require(address(migration) != address(0), "Migration not available");
         Account storage account = accounts[msg.sender];
-        stakedToken.approve(migration, account.balance);
+        stakedToken.approve(address(migration), account.balance);
         migration.migrate(msg.sender, account);
-        delete account;
+        delete accounts[msg.sender];
+        return migration;
     }
 
+    /**
+     * @dev Only callable from old manager.
+     * @notice Migrate account from old manager
+     * @param _vault Account address
+     * @param _account Account data
+     */
     function migrate(address _vault, Account memory _account) external {
-        require(msg.sender == oldManager, "Unauthorized");
-        stakedToken.transferFrom(oldManager, _account.balance, _amount);
+        require(msg.sender == address(oldManager), "Unauthorized");
+        stakedToken.transferFrom(address(oldManager), address(this), _account.balance);
         accounts[_vault] = _account
 ;    }
 

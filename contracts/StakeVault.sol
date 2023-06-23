@@ -13,13 +13,13 @@ contract StakeVault is Ownable {
     StakeManager stakeManager;
     ERC20 stakedToken;
 
-    constructor(address _owner) public {
-        owner = _owner;
+    constructor(address _owner) {
+
     }
 
     function join(uint256 _amount, uint256 _time) external onlyOwner {
-        stakedToken.transferFrom(msg.sender, address(this), amount);
-        stakeManager.join(amount, _time);
+        stakedToken.transferFrom(msg.sender, address(this), _amount);
+        stakeManager.join(_amount, _time);
     }
 
     function lock(uint256 _time) external onlyOwner {
@@ -27,13 +27,13 @@ contract StakeVault is Ownable {
     }
 
     function leave(uint256 _amount) external onlyOwner {
-        stakeManager.leave(amount);
-        stakedToken.transferFrom(address(this), msg.sender, amount);
+        stakeManager.leave(_amount);
+        stakedToken.transferFrom(address(this), msg.sender, _amount);
     }
 
     function updateManager() external onlyOwner {
-        address migrated = stakeManager.migrate();
-        require(migrated != address(0), "Migration not available.");
+        StakeManager migrated = stakeManager.migrate();
+        require(address(migrated) != address(0), "Migration not available.");
         stakeManager = migrated;
     }
 
