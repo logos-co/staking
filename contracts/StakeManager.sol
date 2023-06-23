@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-pragma solidity 0.8.19;
+pragma solidity 0.8.20;
 
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
@@ -159,7 +159,6 @@ contract StakeManager is Ownable {
         stakedToken.approve(migration, account.balance);
         migration.migrate(msg.sender, account);
         delete account;
-        
     }
 
     function migrate(address _vault, Account memory _account) external {
