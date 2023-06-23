@@ -32,15 +32,16 @@ contract StakeManager is ERC20 {
     uint256 currentEpoch;
     uint256 pendingReward;
     uint256 public totalSupply;
-    
-
-
-  
 
     constructor() {
         epoch[0].startTime = now();
     }
 
+    /**
+     * Increases balance of msg.sender;
+     * @param _amount Amount of balance to be decreased.
+     * @param _time Seconds from now() to lock balance.
+     */
     function increaseBalance(uint256 _amount, uint256 _time) external {
         Account storage account = accounts[msg.sender];
         uint256 increasedMultiplier = _amount * (_time + 1);
@@ -53,7 +54,10 @@ contract StakeManager is ERC20 {
         totalSupply += _amount;
     }
 
-
+    /**
+     * Decreases balance of msg.sender;
+     * @param _amount Amount of balance to be decreased
+     */
     function decreaseBalance(uint256 _amount) external {
         Account storage account = accounts[msg.sender];
         uint256 reducedMultiplier = (_amount * account.multiplier) / account.balance;
@@ -65,7 +69,7 @@ contract StakeManager is ERC20 {
     }
 
     /**
-     * Locks entire balance for more amount of time.
+     * @notice Locks entire balance for more amount of time.
      * @param _time amount of time to lock from now.
      */
     function balanceLock(uint256 _time) external {
@@ -82,8 +86,8 @@ contract StakeManager is ERC20 {
     }
 
     /**
-     * @dev Function called to increase the Multiplier Points of a Vault
-     * @param _vault 
+     * @notice Increase the multiplier points of an account
+     * @param _vault Referring account 
      */
     function mintMultiplierPoints(address _vault) external {
         Account storage account = accounts[msg.sender];
@@ -96,6 +100,9 @@ contract StakeManager is ERC20 {
         multiplierSupply += increasedMultiplier;
     }
 
+    /**
+     * @notice Release rewards for current epoch and increase epoch.
+     */
     function executeEpochReward() external {
         if(now() > epoch[currentEpoch].startTime + EPOCH_SIZE){
             uint256 epochReward = stakedToken.balanceOf(this) - pendingReward;
@@ -107,6 +114,11 @@ contract StakeManager is ERC20 {
 
     }
 
+    /**
+     * @notice Execute rewards for account until limit has reached
+     * @param _vault Referred account
+     * @param _limit Until what epoch it should be executed
+     */
     function executeUserReward(address _vault, uint256 _limitEpoch) external {
         Account storage account = accounts[msg.sender];
         uint256 userReward;
