@@ -102,7 +102,7 @@ contract StakeManager is Ownable {
      * @param _vault Referring account 
      */
     function mintMultiplierPoints(address _vault) external {
-        Account storage account = accounts[msg.sender];
+        Account storage account = accounts[_vault];
         uint256 lastCall = block.timestamp - account.lastAccured; 
         uint256 increasedMultiplier = checkMaxMultiplier(
             account.balance * (MP_APY * lastCall),  
@@ -179,7 +179,7 @@ contract StakeManager is Ownable {
         accounts[_vault] = _account
 ;    }
 
-    function checkMaxMultiplier(uint256 _increasedMultiplier, uint256 _currentMp) private view returns(uint256 _maxToIncrease) {
+    function checkMaxMultiplier(uint256 _increasedMultiplier, uint256 _currentMp) private pure returns(uint256 _maxToIncrease) {
         uint256 newMp = _increasedMultiplier + _currentMp;
         return newMp > MAX_MP ? MAX_MP - newMp : _increasedMultiplier;
     }
