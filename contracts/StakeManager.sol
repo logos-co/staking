@@ -15,10 +15,10 @@ contract StakeManager is ERC20 {
     mapping (address => Account) accounts;
 
     struct Account {
-        uint256 lockTime;
+        uint256 lockUntil;
         uint256 balance;
         uint256 multiplier;
-        uint256 update;
+        uint256 lastAccured;
         uint256 epoch;
     }
 
@@ -29,6 +29,7 @@ contract StakeManager is ERC20 {
 
     uint256 currentEpoch;
     uint256 pendingReward;
+    uint256 public totalSupply;
     
     uint256 public constant EPOCH_SIZE = 1 week;
 
@@ -43,27 +44,34 @@ contract StakeManager is ERC20 {
 
     function increaseBalance(uint256 _amount, uint256 _time) external {
         Account storage account = accounts[msg.sender];
+        uint256 inceasedMultiplier = _amount * (_time + 1);
         account.balance += _amount;
-        uint256 mp = calcInitialMultiplierPoints(_amount, _time);
         account.multiplier += mp;
-        multiplierSupply += mp;
-        account.update = now();
-        account.lockTime = now() + _time;
-        mint(msg.sender, _amount);
+        account.lastAccured = now();
+        account.lockUntil = now() + _time;
+
+        multiplierSupply += inceasedMultiplier;
+        totalSupply += _amount;
     }
+
 
     function decreaseBalance(uint256 _amount) external {
         Account storage account = accounts[msg.sender];
+        uint256 reducedMultiplier = (_amount * account.multiplier) / account.balance;
+        account.multiplier -= reducedMultiplier;
         account.balance -= _amount;
-        account.multiplier -= calcInitialMultiplierPoints(_amount, 1);
-        burn(msg.sender, _amount);
+
+        multiplierSupply -= reducedMultiplier;
+        totalSupply -= _amount;
     }
 
 
     function balanceLock(uint256 _time) external {
         Account storage account = accounts[msg.sender];
-        require(now() + _time > account.lockTime, "Cannot decrease lock time");
-        account.lockTime =  now() + _time;
+        require(now() + _time > account.lockUntil, "Cannot decrease lock time");
+        uint256 dT = now() + _time - account.lockUntil; 
+        account.lockUntil =  now() + _time;
+        account.multiplier += _amount * dT;
     }
 
     /**
@@ -72,11 +80,11 @@ contract StakeManager is ERC20 {
      */
     function mintMultiplierPoints(address _vault) external {
         Account storage account = accounts[msg.sender];
-        uint256 dT = now() - account.update; 
-        account.update = now();
-        uint256 mp = calcAccuredMultiplierPoints(account.balance, account.multiplier, dT);
-        multiplierSupply += mp;
-        account.multiplier += mp;
+        uint256 dT = now() - account.lastAccured; 
+        uint256 inceasedMultiplier = calcAccuredMultiplierPoints(account.balance, account.multiplier, dT);
+        account.lastAccured = now();
+        account.multiplier += inceasedMultiplier;
+        multiplierSupply += inceasedMultiplier;
     }
 
     function executeEpochReward() external {
@@ -105,10 +113,6 @@ contract StakeManager is ERC20 {
         account.epoch = userEpoch;
         pendingReward -= userReward;
         stakedToken.transfer(_vault, userReward);
-    }
-
-    function calcInitialMultiplierPoints(uint256 _amount, uint256 _time) pure public returns(uint256) {
-        return _amount * (_time + 1);
     }
 
     function calcAccuredMultiplierPoints(uint256 _balance, uint256 _currentMp, uint256 _deltaTime) pure public returns(uint256) {
