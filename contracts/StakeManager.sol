@@ -18,7 +18,7 @@ contract StakeManager is ERC20 {
         uint256 lockTime;
         uint256 balance;
         uint256 multiplier;
-        uint256 multiplierUpdate;
+        uint256 update;
         uint256 epoch;
     }
 
