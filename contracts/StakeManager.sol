@@ -4,7 +4,7 @@ pragma solidity 0.8.19;
 
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
-contract StakeManager is ERC20 {
+contract StakeManager is Controlled {
 
     struct Account {
         uint256 lockUntil;
@@ -27,11 +27,17 @@ contract StakeManager is ERC20 {
 
     mapping (address => Account) accounts;
     mapping (uint256 => Epoch) epoch;
+    mapping (bytes32 => bool) isVault;
 
     ERC20 stakedToken;
     uint256 currentEpoch;
     uint256 pendingReward;
     uint256 public totalSupply;
+
+    modifier onlyVault {
+        require(isVault[msg.sender.codehash], "Not a vault")
+        _;
+    }
 
     constructor() {
         epoch[0].startTime = now();
@@ -134,6 +140,14 @@ contract StakeManager is ERC20 {
         account.epoch = userEpoch;
         pendingReward -= userReward;
         stakedToken.transfer(_vault, userReward);
+    }
+    
+    /**
+     * @notice Enables a contract class to interact with staking functions
+     * @param _codehash bytecode hash of contract
+     */
+    function setVault(bytes32 _codehash) external onlyController {
+        isVault[_codehash] = true;  
     }
 
     function checkMaxMultiplier(uint256 _increasedMultiplier, uint256 _currentMp) private view returns(uint256 _maxToIncrease) {
