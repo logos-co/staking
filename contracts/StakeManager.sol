@@ -39,18 +39,17 @@ contract StakeManager is ERC20 {
 
     constructor() {
         epoch[0].startTime = now();
-
     }
 
     function increaseBalance(uint256 _amount, uint256 _time) external {
         Account storage account = accounts[msg.sender];
-        uint256 inceasedMultiplier = _amount * (_time + 1);
+        uint256 increasedMultiplier = _amount * (_time + 1);
         account.balance += _amount;
         account.multiplier += mp;
         account.lastAccured = now();
         account.lockUntil = now() + _time;
 
-        multiplierSupply += inceasedMultiplier;
+        multiplierSupply += increasedMultiplier;
         totalSupply += _amount;
     }
 
@@ -65,13 +64,21 @@ contract StakeManager is ERC20 {
         totalSupply -= _amount;
     }
 
-
+    /**
+     * Locks entire balance for more amount of time.
+     * @param _time amount of time to lock from now.
+     */
     function balanceLock(uint256 _time) external {
         Account storage account = accounts[msg.sender];
         require(now() + _time > account.lockUntil, "Cannot decrease lock time");
-        uint256 dT = now() + _time - account.lockUntil; 
+
+        //if balance still locked, multipliers must be minted from difference of time.
+        uint256 dT = account.lockUntil > now() ? now() + _time - account.lockUntil : _time); 
         account.lockUntil =  now() + _time;
-        account.multiplier += _amount * dT;
+        uint256 increasedMultiplier = _amount * dT;
+
+        account.multiplier += increasedMultiplier;
+        multiplierSupply += increasedMultiplier;
     }
 
     /**
@@ -80,11 +87,13 @@ contract StakeManager is ERC20 {
      */
     function mintMultiplierPoints(address _vault) external {
         Account storage account = accounts[msg.sender];
-        uint256 dT = now() - account.lastAccured; 
-        uint256 inceasedMultiplier = calcAccuredMultiplierPoints(account.balance, account.multiplier, dT);
+        uint256 lastCall = now() - account.lastAccured; 
+        uint256 increasedMultiplier = checkMaxMultiplier(
+            account.balance * (MP_APY * lastCall),  
+            account.multiplier);
         account.lastAccured = now();
-        account.multiplier += inceasedMultiplier;
-        multiplierSupply += inceasedMultiplier;
+        account.multiplier += increasedMultiplier;
+        multiplierSupply += increasedMultiplier;
     }
 
     function executeEpochReward() external {
@@ -115,10 +124,9 @@ contract StakeManager is ERC20 {
         stakedToken.transfer(_vault, userReward);
     }
 
-    function calcAccuredMultiplierPoints(uint256 _balance, uint256 _currentMp, uint256 _deltaTime) pure public returns(uint256) {
-        uint256 accured = _balance * (MP_APY * _deltaTime);
-        uint256 newMp = accured + _currentMp;
-        return newMp > MAX_MP ? MAX_MP - newMp : accurred;
+    function checkMaxMultiplier(uint256 _increasedMultiplier, uint256 _currentMp) private view returns(uint256 _maxToIncrease) {
+        uint256 newMp = _increasedMultiplier + _currentMp;
+        return newMp > MAX_MP ? MAX_MP - newMp : _increasedMultiplier;
     }
 
 }
