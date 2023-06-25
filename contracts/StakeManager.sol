@@ -54,7 +54,7 @@ contract StakeManager is Ownable {
      * @param _amount Amount of balance to be decreased.
      * @param _time Seconds from block.timestamp to lock balance.
      */
-    function join(uint256 _amount, uint256 _time) external {
+    function stake(uint256 _amount, uint256 _time) external onlyVault {
         Account storage account = accounts[msg.sender];
         uint256 increasedMultiplier = _amount * (_time + 1);
         account.balance += _amount;
@@ -70,7 +70,7 @@ contract StakeManager is Ownable {
      * Decreases balance of msg.sender;
      * @param _amount Amount of balance to be decreased
      */
-    function leave(uint256 _amount) external {
+    function unstake(uint256 _amount) external onlyVault {
         Account storage account = accounts[msg.sender];
         uint256 reducedMultiplier = (_amount * account.multiplier) / account.balance;
         account.multiplier -= reducedMultiplier;
@@ -84,7 +84,7 @@ contract StakeManager is Ownable {
      * @notice Locks entire balance for more amount of time.
      * @param _time amount of time to lock from now.
      */
-    function lock(uint256 _time) external {
+    function lock(uint256 _time) external onlyVault {
         Account storage account = accounts[msg.sender];
         require(block.timestamp + _time > account.lockUntil, "Cannot decrease lock time");
 
@@ -104,10 +104,10 @@ contract StakeManager is Ownable {
     function mintMultiplierPoints(address _vault) external {
         Account storage account = accounts[_vault];
         uint256 lastCall = block.timestamp - account.lastAccured; 
-        uint256 increasedMultiplier = checkMaxMultiplier(
+        account.lastAccured = block.timestamp;
+        uint256 increasedMultiplier = calcMaxMultiplierIncrease(
             account.balance * (MP_APY * lastCall),  
             account.multiplier);
-        account.lastAccured = block.timestamp;
         account.multiplier += increasedMultiplier;
         multiplierSupply += increasedMultiplier;
     }
@@ -179,7 +179,7 @@ contract StakeManager is Ownable {
         accounts[_vault] = _account
 ;    }
 
-    function checkMaxMultiplier(uint256 _increasedMultiplier, uint256 _currentMp) private pure returns(uint256 _maxToIncrease) {
+    function calcMaxMultiplierIncrease(uint256 _increasedMultiplier, uint256 _currentMp) private pure returns(uint256 _maxToIncrease) {
         uint256 newMp = _increasedMultiplier + _currentMp;
         return newMp > MAX_MP ? MAX_MP - newMp : _increasedMultiplier;
     }
