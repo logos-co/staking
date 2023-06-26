@@ -111,7 +111,7 @@ contract StakeManager is Ownable {
         Account memory account = accounts[msg.sender];
         delete accounts[msg.sender];
         multiplierSupply -= account.multiplier;
-        stakeSupply -= _account.mount;
+        stakeSupply -= account.balance;
     }
 
     /**
