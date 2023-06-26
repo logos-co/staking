@@ -105,6 +105,16 @@ contract StakeManager is Ownable {
     }
 
     /**
+     * @notice leave without processing account
+     */
+    function leave() external onlyVault {
+        Account memory account = accounts[msg.sender];
+        delete accounts[msg.sender];
+        multiplierSupply -= account.multiplier;
+        stakeSupply -= _account.mount;
+    }
+
+    /**
      * @notice Release rewards for current epoch and increase epoch.
      */
     function executeEpoch() external {
@@ -170,7 +180,8 @@ contract StakeManager is Ownable {
 
     function processAccount(Account storage account, uint256 _limitEpoch) private {
         processEpoch();
-        require(_limitEpoch <= currentEpoch, "Non-sese call");
+        require(address(migration) == address(0), "Contract ended, please migrate");
+        require(_limitEpoch <= currentEpoch, "Non-sense call");
         uint256 userReward;
         uint256 userEpoch = account.epoch;
         for (Epoch memory iEpoch = epochs[userEpoch]; userEpoch < _limitEpoch; userEpoch++) {

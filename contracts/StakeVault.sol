@@ -32,6 +32,11 @@ contract StakeVault is Ownable {
         stakedToken.transferFrom(address(this), msg.sender, _amount);
     }
 
+    function leave() external onlyOwner {
+        stakeManager.leave();
+        stakedToken.transferFrom(address(this), msg.sender, stakedToken.balanceOf(address(this)));
+    }
+
     /**
      * @notice Opt-in migration to a new StakeManager contract.
      */
