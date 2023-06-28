@@ -17,7 +17,8 @@ describe("StakeManager contract", function () {
 
   async function deployStakeManager() {
     const { testToken, owner } = await loadFixture(deployTokenFixture);
-    const stakeManager = await ethers.deployContract("StakeManager", [testToken.address, "0x0000000000000000000000000000000000000000"]);
+    console.log(testToken)
+    const stakeManager = await ethers.deployContract("StakeManager", [testToken.target, "0x0000000000000000000000000000000000000000"]);
     return { stakeManager, testToken, owner };
   }
 
