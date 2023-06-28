@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0
-pragma solidity 0.4.20;
+pragma solidity 0.8.18;
 /*
     Copyright 2016, Jordi Baylina
 
@@ -39,9 +39,9 @@ import "./MiniMeTokenFactory.sol";
 contract MiniMeToken is Controlled {
 
     string public name;                //The Token's name: e.g. DigixDAO Tokens
-    uint8 public immutable decimals;             //Number of decimals of the smallest unit
+    uint8 public decimals;             //Number of decimals of the smallest unit
     string public symbol;              //An identifier: e.g. REP
-    string public constant version = "MMT_0.1"; //An arbitrary versioning scheme
+    string public version = "MMT_0.1"; //An arbitrary versioning scheme
 
     /**
      * @dev `Checkpoint` is the structure that attaches a block number to a
@@ -59,14 +59,14 @@ contract MiniMeToken is Controlled {
 
     // `parentToken` is the Token address that was cloned to produce this token;
     //  it will be 0x0 for a token that was not cloned
-    MiniMeToken public immutable parentToken;
+    MiniMeToken public parentToken;
 
     // `parentSnapShotBlock` is the block number from the Parent Token that was
     //  used to determine the initial distribution of the Clone Token
-    uint public immutable parentSnapShotBlock;
+    uint public parentSnapShotBlock;
 
     // `creationBlock` is the block number that the Clone Token was created
-    uint public immutable creationBlock;
+    uint public creationBlock;
 
     // `balances` is the map that tracks the balance of each address, in this
     //  contract when the balance changes the block number that the change
@@ -83,7 +83,7 @@ contract MiniMeToken is Controlled {
     bool public transfersEnabled;
 
     // The factory used to create new clone tokens
-    MiniMeTokenFactory public immutable tokenFactory;
+    MiniMeTokenFactory public tokenFactory;
 
 ////////////////
 // Constructor

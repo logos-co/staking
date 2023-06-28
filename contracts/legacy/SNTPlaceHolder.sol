@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0
-pragma solidity 0.4.20;
+pragma solidity 0.8.18;
 import "./token/TokenController.sol";
 import "./token/MiniMeToken.sol";
 import "./SafeMath.sol";
@@ -31,7 +31,7 @@ import "./Owned.sol";
 ///  asks it to do so.
 contract SNTPlaceHolder is TokenController, Owned {
     using SafeMath for uint256;
-    MiniMeToken public immutable snt;
+    MiniMeToken public snt;
 
     constructor(address _owner, address payable _snt) {
         owner = _owner;

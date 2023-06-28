@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0
-pragma solidity 0.4.20;
+pragma solidity 0.8.18;
 /// @dev `Owned` is a base level contract that assigns an `owner` that can be
 ///  later changed
 contract Owned {
