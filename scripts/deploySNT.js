@@ -24,11 +24,11 @@ async function main() {
   const tokenController = await ethers.deployContract(
     network.config.chainId == 1 ? "SNTPlaceHolder" : "SNTFaucet",
     [
-      deployer,
-      tokenController.target
+      deployer.address,
+      miniMeToken.target
     ]
   );
-  await miniMeToken.changeController(tokenController.address);
+  await miniMeToken.changeController(tokenController.target);
   console.log(
     `${network.config.chainId == 1 ? "SNT" : "STT"} ${miniMeToken.target} controlled by ${await miniMeToken.controller()}`
   );
