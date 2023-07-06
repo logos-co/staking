@@ -60,14 +60,9 @@ contract StakeManager is Ownable {
     function stake(uint256 _amount, uint256 _time) external onlyVault {
         Account storage account = accounts[msg.sender];
         processAccount(account, currentEpoch);
-        uint256 increasedMultiplier = _amount * (_time + 1);
         account.balance += _amount;
-        account.multiplier += increasedMultiplier;
-        account.lastMint = block.timestamp;
-        account.lockUntil = block.timestamp + _time;
         account.rewardAddress = StakeVault(msg.sender).owner();
-
-        multiplierSupply += increasedMultiplier;
+        mintIntialMultiplier(account, _time);
         stakeSupply += _amount;
     }
 
@@ -77,11 +72,11 @@ contract StakeManager is Ownable {
      */
     function unstake(uint256 _amount) external onlyVault {
         Account storage account = accounts[msg.sender];
+        require(account.lockUntil <= block.timestamp, "Funds are locked");
         processAccount(account, currentEpoch);
         uint256 reducedMultiplier = (_amount * account.multiplier) / account.balance;
         account.multiplier -= reducedMultiplier;
         account.balance -= _amount;
-
         multiplierSupply -= reducedMultiplier;
         stakeSupply -= _amount;
     }
@@ -94,20 +89,14 @@ contract StakeManager is Ownable {
         Account storage account = accounts[msg.sender];
         processAccount(account, currentEpoch);
         require(block.timestamp + _time > account.lockUntil, "Cannot decrease lock time");
-
-        //if balance still locked, multipliers must be minted from difference of time.
-        uint256 dT = account.lockUntil > block.timestamp ? block.timestamp + _time - account.lockUntil : _time; 
-        account.lockUntil =  block.timestamp + _time;
-        uint256 increasedMultiplier = account.balance * dT;
-
-        account.multiplier += increasedMultiplier;
-        multiplierSupply += increasedMultiplier;
+        mintIntialMultiplier(account, _time);
     }
 
     /**
      * @notice leave without processing account
      */
     function leave() external onlyVault {
+        require(address(migration) != address(0), "Leave only during migration");
         Account memory account = accounts[msg.sender];
         delete accounts[msg.sender];
         multiplierSupply -= account.multiplier;
@@ -208,7 +197,16 @@ contract StakeManager is Ownable {
             account.multiplier);
         account.multiplier += increasedMultiplier;
         multiplierSupply += increasedMultiplier;
+    }
 
+    function mintIntialMultiplier(Account storage account, uint256 lockTime) private {
+        //if balance still locked, multipliers must be minted from difference of time.
+        uint256 dT = account.lockUntil > block.timestamp ? block.timestamp + lockTime - account.lockUntil : lockTime; 
+        account.lockUntil =  block.timestamp + lockTime;
+        uint256 increasedMultiplier = account.balance * dT;
+        account.lastMint = block.timestamp;
+        account.multiplier += increasedMultiplier;
+        multiplierSupply += increasedMultiplier;
     }
 
     function totalSupply() public view returns (uint256) {
