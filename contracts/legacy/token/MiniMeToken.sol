@@ -41,7 +41,7 @@ contract MiniMeToken is Controlled {
     string public name;                //The Token's name: e.g. DigixDAO Tokens
     uint8 public decimals;             //Number of decimals of the smallest unit
     string public symbol;              //An identifier: e.g. REP
-    string public version = "MMT_0.1"; //An arbitrary versioning scheme
+    string public token_version = "MMT_0.1"; //An arbitrary versioning scheme
 
     /**
      * @dev `Checkpoint` is the structure that attaches a block number to a
@@ -254,6 +254,36 @@ contract MiniMeToken is Controlled {
         return true;
     }
 
+    function _mint(
+        address _owner,
+        uint _amount
+    )
+        internal
+    {
+        uint curTotalSupply = totalSupplyAt(block.number);
+        require(curTotalSupply + _amount >= curTotalSupply, "Total overflow"); // Check for overflow
+        uint previousBalanceTo = balanceOfAt(_owner, block.number);
+        require(previousBalanceTo + _amount >= previousBalanceTo, "Balance overflow"); // Check for overflow
+        updateValueAtNow(totalSupplyHistory, curTotalSupply + _amount);
+        updateValueAtNow(balances[_owner], previousBalanceTo + _amount);
+        emit Transfer(address(0), _owner, _amount);
+    }
+
+    function _burn(
+        address _owner,
+        uint _amount
+    ) 
+        internal
+    {
+        uint curTotalSupply = totalSupplyAt(block.number);
+        require(curTotalSupply >= _amount, "No enough supply");
+        uint previousBalanceFrom = balanceOfAt(_owner, block.number);
+        require(previousBalanceFrom >= _amount, "No enough balance");
+        updateValueAtNow(totalSupplyHistory, curTotalSupply - _amount);
+        updateValueAtNow(balances[_owner], previousBalanceFrom - _amount);
+        emit Transfer(_owner, address(0), _amount);
+    }
+
     /**
      * @param _owner The address that's balance is being requested
      * @return balance The balance of `_owner` at the current block
@@ -456,13 +486,7 @@ contract MiniMeToken is Controlled {
         onlyController
         returns (bool)
     {
-        uint curTotalSupply = totalSupplyAt(block.number);
-        require(curTotalSupply + _amount >= curTotalSupply, "Total overflow"); // Check for overflow
-        uint previousBalanceTo = balanceOfAt(_owner, block.number);
-        require(previousBalanceTo + _amount >= previousBalanceTo, "Balance overflow"); // Check for overflow
-        updateValueAtNow(totalSupplyHistory, curTotalSupply + _amount);
-        updateValueAtNow(balances[_owner], previousBalanceTo + _amount);
-        emit Transfer(address(0), _owner, _amount);
+        _mint(_owner, _amount);
         return true;
     }
 
@@ -480,13 +504,7 @@ contract MiniMeToken is Controlled {
         onlyController
         returns (bool)
     {
-        uint curTotalSupply = totalSupplyAt(block.number);
-        require(curTotalSupply >= _amount, "No enough supply");
-        uint previousBalanceFrom = balanceOfAt(_owner, block.number);
-        require(previousBalanceFrom >= _amount, "No enough balance");
-        updateValueAtNow(totalSupplyHistory, curTotalSupply - _amount);
-        updateValueAtNow(balances[_owner], previousBalanceFrom - _amount);
-        emit Transfer(_owner, address(0), _amount);
+        _burn(_owner, _amount);
         return true;
     }
 
