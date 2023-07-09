@@ -203,7 +203,7 @@ contract StakeManager is Ownable {
         //if balance still locked, multipliers must be minted from difference of time.
         uint256 dT = account.lockUntil > block.timestamp ? block.timestamp + lockTime - account.lockUntil : lockTime; 
         account.lockUntil =  block.timestamp + lockTime;
-        uint256 increasedMultiplier = account.balance * dT;
+        uint256 increasedMultiplier = account.balance * (dT+1); //dT+1 could be replaced by requiring that dT is > 0, as it wouldnt matter 1 second locked. 
         account.lastMint = block.timestamp;
         account.multiplier += increasedMultiplier;
         multiplierSupply += increasedMultiplier;
