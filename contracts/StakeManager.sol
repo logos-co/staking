@@ -24,9 +24,10 @@ contract StakeManager is Ownable {
     }
 
     uint256 public constant EPOCH_SIZE = 1 weeks;
+    uint256 public constant YEAR = 365 days; 
     uint256 public constant MP_APY = 1; 
     uint256 public constant STAKE_APY = 1; 
-    uint256 public constant MAX_BOOST = 1; 
+    uint256 public constant MAX_BOOST = 4; 
     uint256 public constant MAX_MP = 1; 
 
     mapping (address => Account) accounts;
@@ -62,7 +63,7 @@ contract StakeManager is Ownable {
         processAccount(account, currentEpoch);
         account.balance += _amount;
         account.rewardAddress = StakeVault(msg.sender).owner();
-        mintIntialMultiplier(account, _time);
+        mintIntialMultiplier(account, _time, _amount);
         stakeSupply += _amount;
     }
 
@@ -199,11 +200,11 @@ contract StakeManager is Ownable {
         multiplierSupply += increasedMultiplier;
     }
 
-    function mintIntialMultiplier(Account storage account, uint256 lockTime) private {
+    function mintIntialMultiplier(Account storage account, uint256 lockTime, uint256 amount) private {
         //if balance still locked, multipliers must be minted from difference of time.
         uint256 dT = account.lockUntil > block.timestamp ? block.timestamp + lockTime - account.lockUntil : lockTime; 
         account.lockUntil =  block.timestamp + lockTime;
-        uint256 increasedMultiplier = account.balance * (dT+1); //dT+1 could be replaced by requiring that dT is > 0, as it wouldnt matter 1 second locked. 
+        uint256 increasedMultiplier = amount * ((dT/YEAR)+1); 
         account.lastMint = block.timestamp;
         account.multiplier += increasedMultiplier;
         multiplierSupply += increasedMultiplier;
