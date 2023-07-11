@@ -26,9 +26,8 @@ contract StakeManager is Ownable {
     uint256 public constant EPOCH_SIZE = 1 weeks;
     uint256 public constant YEAR = 365 days; 
     uint256 public constant MP_APY = 1; 
-    uint256 public constant STAKE_APY = 1; 
     uint256 public constant MAX_BOOST = 4; 
-    uint256 public constant MAX_MP = 1; 
+   
 
     mapping (address => Account) accounts;
     mapping (uint256 => Epoch) epochs;
@@ -151,9 +150,16 @@ contract StakeManager is Ownable {
         accounts[_vault] = _account;
      }
 
-    function calcMaxMultiplierIncrease(uint256 _increasedMultiplier, uint256 _currentMp) private pure returns(uint256 _maxToIncrease) {
+    function calcMaxMultiplierIncrease(uint256 _increasedMultiplier, uint256 _currentMp, uint256 _lockUntil, uint256 _stake) private pure returns(uint256 _maxToIncrease) {
         uint256 newMp = _increasedMultiplier + _currentMp;
-        return newMp > MAX_MP ? MAX_MP - newMp : _increasedMultiplier;
+        if(block.timestamp > _lockUntil){
+            //not locked, limit to max_boost
+            return newMp > _stake*MAX_BOOST ? _stake*MAX_BOOST - _currentMp : _increasedMultiplier; 
+        } else {
+            // locked, ignore cap
+            return _increasedMultiplier;
+        }
+        
     }
 
     function processEpoch() private {
@@ -194,8 +200,8 @@ contract StakeManager is Ownable {
         uint256 deltaTime = processTime - account.lastMint; 
         account.lastMint = processTime;
         uint256 increasedMultiplier = calcMaxMultiplierIncrease(
-            account.balance * (MP_APY * deltaTime),  
-            account.multiplier);
+            account.balance * (MP_APY/YEAR * deltaTime),  
+            account.multiplier, account.lockUntil, account.balance);
         account.multiplier += increasedMultiplier;
         multiplierSupply += increasedMultiplier;
     }
@@ -206,8 +212,9 @@ contract StakeManager is Ownable {
         account.lockUntil =  block.timestamp + lockTime;
         uint256 increasedMultiplier = amount * ((dT/YEAR)+initMint); 
         account.lastMint = block.timestamp;
-        account.multiplier += increasedMultiplier;
+        increasedMultiplier = account.multiplier+increasedMultiplier > (account.balance*(MAX_BOOST+(dT/YEAR))) ?  account.balance*(MAX_BOOST+(dT/YEAR))-account.multiplier : increasedMultiplier; // checks if MPs are within (lock_time_in_years+MAX_BOOST)*stake
         multiplierSupply += increasedMultiplier;
+        account.multiplier += increasedMultiplier;
     }
 
     function totalSupply() public view returns (uint256) {
