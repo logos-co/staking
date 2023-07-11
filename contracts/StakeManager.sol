@@ -63,7 +63,7 @@ contract StakeManager is Ownable {
         processAccount(account, currentEpoch);
         account.balance += _amount;
         account.rewardAddress = StakeVault(msg.sender).owner();
-        mintIntialMultiplier(account, _time, _amount);
+        mintIntialMultiplier(account, _time, _amount, 1);
         stakeSupply += _amount;
     }
 
@@ -90,7 +90,7 @@ contract StakeManager is Ownable {
         Account storage account = accounts[msg.sender];
         processAccount(account, currentEpoch);
         require(block.timestamp + _time > account.lockUntil, "Cannot decrease lock time");
-        mintIntialMultiplier(account, _time);
+        mintIntialMultiplier(account, _time, account.balance, 0);
     }
 
     /**
@@ -200,11 +200,11 @@ contract StakeManager is Ownable {
         multiplierSupply += increasedMultiplier;
     }
 
-    function mintIntialMultiplier(Account storage account, uint256 lockTime, uint256 amount) private {
+    function mintIntialMultiplier(Account storage account, uint256 lockTime, uint256 amount, uint256 initMint) private {
         //if balance still locked, multipliers must be minted from difference of time.
         uint256 dT = account.lockUntil > block.timestamp ? block.timestamp + lockTime - account.lockUntil : lockTime; 
         account.lockUntil =  block.timestamp + lockTime;
-        uint256 increasedMultiplier = amount * ((dT/YEAR)+1); 
+        uint256 increasedMultiplier = amount * ((dT/YEAR)+initMint); 
         account.lastMint = block.timestamp;
         account.multiplier += increasedMultiplier;
         multiplierSupply += increasedMultiplier;
