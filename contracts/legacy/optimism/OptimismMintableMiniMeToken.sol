@@ -1,7 +1,7 @@
 
 
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.18;
+pragma solidity ^0.8.18;
 
 import { MiniMeToken } from "../token/MiniMeToken.sol";
 import { IERC165 } from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
