@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-pragma solidity 0.8.18;
+pragma solidity ^0.8.18;
 
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
@@ -150,7 +150,7 @@ contract StakeManager is Ownable {
         accounts[_vault] = _account;
      }
 
-    function calcMaxMultiplierIncrease(uint256 _increasedMultiplier, uint256 _currentMp, uint256 _lockUntil, uint256 _stake) private pure returns(uint256 _maxToIncrease) {
+    function calcMaxMultiplierIncrease(uint256 _increasedMultiplier, uint256 _currentMp, uint256 _lockUntil, uint256 _stake) private view returns(uint256 _maxToIncrease) {
         uint256 newMp = _increasedMultiplier + _currentMp;
         if(block.timestamp > _lockUntil){
             //not locked, limit to max_boost
