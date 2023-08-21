@@ -187,6 +187,7 @@ contract StakeManager is Ownable {
             uint256 userShare = userSupply / iEpoch.totalSupply; //TODO: might lose precision, multiply by 100 and divide back later?
             userReward += userShare * iEpoch.epochReward; 
         }
+        //ERR: Order of claims on past epochs matters (totalSupply changes by claiming MPs) and leads to unequal staking APY
         account.epoch = userEpoch;
         if(userReward > 0){
             pendingReward -= userReward;
@@ -209,7 +210,7 @@ contract StakeManager is Ownable {
     function mintIntialMultiplier(Account storage account, uint256 lockTime, uint256 amount, uint256 initMint) private {
         //if balance still locked, multipliers must be minted from difference of time.
         uint256 dT = account.lockUntil > block.timestamp ? block.timestamp + lockTime - account.lockUntil : lockTime; 
-        account.lockUntil =  block.timestamp + lockTime;
+        account.lockUntil =  block.timestamp + lockTime; // ERR: we need require() to check if dT is negative
         uint256 increasedMultiplier = amount * ((dT/YEAR)+initMint); 
         account.lastMint = block.timestamp;
         increasedMultiplier = account.multiplier+increasedMultiplier > (account.balance*(MAX_BOOST+(dT/YEAR))) ?  account.balance*(MAX_BOOST+(dT/YEAR))-account.multiplier : increasedMultiplier; // checks if MPs are within (lock_time_in_years+MAX_BOOST)*stake
