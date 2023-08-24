@@ -11,16 +11,23 @@ import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
  * @notice Secures user stake
  */
 contract StakeVault is Ownable {
-    StakeManager stakeManager;
-    ERC20 stakedToken;
 
-    constructor(address _owner) {
+    StakeManager private stakeManager;
+    ERC20 immutable stakedToken;
+
+    event Staked(address from, address to, uint256 _amount, uint256 time);
+
+    constructor(address _owner, ERC20 _stakedToken, StakeManager _stakeManager) {
         _transferOwnership(_owner);
+        stakedToken = _stakedToken;
+        stakeManager = _stakeManager;
     }
 
     function stake(uint256 _amount, uint256 _time) external onlyOwner {
         stakedToken.transferFrom(msg.sender, address(this), _amount);
         stakeManager.stake(_amount, _time);
+
+        emit Staked(msg.sender, address(this), _amount, _time);
     }
 
     function lock(uint256 _time) external onlyOwner {
