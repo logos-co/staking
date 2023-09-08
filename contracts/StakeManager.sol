@@ -2,12 +2,11 @@
 
 pragma solidity ^0.8.18;
 
-import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import "@openzeppelin/contracts/access/Ownable.sol";
-import "./StakeVault.sol";
+import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
+import { StakeVault } from "./StakeVault.sol";
 
 contract StakeManager is Ownable {
-
     struct Account {
         uint256 lockUntil;
         uint256 balance;
@@ -19,21 +18,19 @@ contract StakeManager is Ownable {
 
     struct Epoch {
         uint256 startTime;
-        uint256 epochReward;   
-        uint256 totalSupply; 
+        uint256 epochReward;
+        uint256 totalSupply;
     }
 
     uint256 public constant EPOCH_SIZE = 1 weeks;
-    uint256 public constant YEAR = 365 days; 
-    uint256 public constant MP_APY = 1; 
-    uint256 public constant MAX_BOOST = 4; 
-   
+    uint256 public constant YEAR = 365 days;
+    uint256 public constant MP_APY = 1;
+    uint256 public constant MAX_BOOST = 4;
 
-    mapping (address => Account) accounts;
-    mapping (uint256 => Epoch) epochs;
-    mapping (bytes32 => bool) isVault;
+    mapping(address => Account) accounts;
+    mapping(uint256 => Epoch) epochs;
+    mapping(bytes32 => bool) isVault;
 
-    
     uint256 public currentEpoch;
     uint256 public pendingReward;
     uint256 public multiplierSupply;
@@ -41,15 +38,16 @@ contract StakeManager is Ownable {
     StakeManager public migration;
     StakeManager public immutable oldManager;
     ERC20 public immutable stakedToken;
-    modifier onlyVault {
+
+    modifier onlyVault() {
         require(isVault[msg.sender.codehash], "Not a vault");
         _;
     }
 
-    constructor(ERC20 _stakedToken, StakeManager _oldManager) Ownable()  {
+    constructor(address _stakedToken, address _oldManager) {
         epochs[0].startTime = block.timestamp;
-        oldManager = _oldManager;
-        stakedToken = _stakedToken;
+        oldManager = StakeManager(_oldManager);
+        stakedToken = ERC20(_stakedToken);
     }
 
     /**
@@ -116,19 +114,20 @@ contract StakeManager is Ownable {
      * @param _limitEpoch Until what epoch it should be executed
      */
     function executeAccount(address _vault, uint256 _limitEpoch) external {
-        processAccount(accounts[_vault], _limitEpoch); 
+        processAccount(accounts[_vault], _limitEpoch);
     }
-    
+
     /**
      * @notice Enables a contract class to interact with staking functions
      * @param _codehash bytecode hash of contract
      */
     function setVault(bytes32 _codehash) external onlyOwner {
-        isVault[_codehash] = true;  
+        isVault[_codehash] = true;
     }
     /**
      * @notice Migrate account to new manager.
      */
+
     function migrate() external onlyVault returns (StakeManager newManager) {
         require(address(migration) != address(0), "Migration not available");
         Account storage account = accounts[msg.sender];
@@ -148,22 +147,30 @@ contract StakeManager is Ownable {
         require(msg.sender == address(oldManager), "Unauthorized");
         stakedToken.transferFrom(address(oldManager), address(this), _account.balance);
         accounts[_vault] = _account;
-     }
+    }
 
-    function calcMaxMultiplierIncrease(uint256 _increasedMultiplier, uint256 _currentMp, uint256 _lockUntil, uint256 _stake) private view returns(uint256 _maxToIncrease) {
+    function calcMaxMultiplierIncrease(
+        uint256 _increasedMultiplier,
+        uint256 _currentMp,
+        uint256 _lockUntil,
+        uint256 _stake
+    )
+        private
+        view
+        returns (uint256 _maxToIncrease)
+    {
         uint256 newMp = _increasedMultiplier + _currentMp;
-        if(block.timestamp > _lockUntil){
+        if (block.timestamp > _lockUntil) {
             //not locked, limit to max_boost
-            return newMp > _stake*MAX_BOOST ? _stake*MAX_BOOST - _currentMp : _increasedMultiplier; 
+            return newMp > _stake * MAX_BOOST ? _stake * MAX_BOOST - _currentMp : _increasedMultiplier;
         } else {
             // locked, ignore cap
             return _increasedMultiplier;
         }
-        
     }
 
     function processEpoch() private {
-        if(block.timestamp >= epochEnd()){
+        if (block.timestamp >= epochEnd()) {
             //finalize current epoch
             epochs[currentEpoch].epochReward = epochReward();
             epochs[currentEpoch].totalSupply = totalSupply();
@@ -184,35 +191,44 @@ contract StakeManager is Ownable {
             //mint multipliers to that epoch
             mintMultiplier(account, iEpoch.startTime + EPOCH_SIZE);
             uint256 userSupply = account.balance + account.multiplier;
-            uint256 userShare = userSupply / iEpoch.totalSupply; //TODO: might lose precision, multiply by 100 and divide back later?
-            userReward += userShare * iEpoch.epochReward; 
+            uint256 userShare = userSupply / iEpoch.totalSupply; //TODO: might lose precision, multiply by 100 and
+                // divide back later?
+            userReward += userShare * iEpoch.epochReward;
         }
         account.epoch = userEpoch;
-        if(userReward > 0){
+        if (userReward > 0) {
             pendingReward -= userReward;
             stakedToken.transfer(account.rewardAddress, userReward);
         }
         mintMultiplier(account, block.timestamp);
     }
 
-
     function mintMultiplier(Account storage account, uint256 processTime) private {
-        uint256 deltaTime = processTime - account.lastMint; 
+        uint256 deltaTime = processTime - account.lastMint;
         account.lastMint = processTime;
         uint256 increasedMultiplier = calcMaxMultiplierIncrease(
-            account.balance * (MP_APY/YEAR * deltaTime),  
-            account.multiplier, account.lockUntil, account.balance);
+            account.balance * (MP_APY / YEAR * deltaTime), account.multiplier, account.lockUntil, account.balance
+        );
         account.multiplier += increasedMultiplier;
         multiplierSupply += increasedMultiplier;
     }
 
-    function mintIntialMultiplier(Account storage account, uint256 lockTime, uint256 amount, uint256 initMint) private {
+    function mintIntialMultiplier(
+        Account storage account,
+        uint256 lockTime,
+        uint256 amount,
+        uint256 initMint
+    )
+        private
+    {
         //if balance still locked, multipliers must be minted from difference of time.
-        uint256 dT = account.lockUntil > block.timestamp ? block.timestamp + lockTime - account.lockUntil : lockTime; 
-        account.lockUntil =  block.timestamp + lockTime;
-        uint256 increasedMultiplier = amount * ((dT/YEAR)+initMint); 
+        uint256 dT = account.lockUntil > block.timestamp ? block.timestamp + lockTime - account.lockUntil : lockTime;
+        account.lockUntil = block.timestamp + lockTime;
+        uint256 increasedMultiplier = amount * ((dT / YEAR) + initMint);
         account.lastMint = block.timestamp;
-        increasedMultiplier = account.multiplier+increasedMultiplier > (account.balance*(MAX_BOOST+(dT/YEAR))) ?  account.balance*(MAX_BOOST+(dT/YEAR))-account.multiplier : increasedMultiplier; // checks if MPs are within (lock_time_in_years+MAX_BOOST)*stake
+        increasedMultiplier = account.multiplier + increasedMultiplier > (account.balance * (MAX_BOOST + (dT / YEAR)))
+            ? account.balance * (MAX_BOOST + (dT / YEAR)) - account.multiplier
+            : increasedMultiplier; // checks if MPs are within (lock_time_in_years+MAX_BOOST)*stake
         multiplierSupply += increasedMultiplier;
         account.multiplier += increasedMultiplier;
     }
@@ -228,5 +244,4 @@ contract StakeManager is Ownable {
     function epochEnd() public view returns (uint256) {
         return epochs[currentEpoch].startTime + EPOCH_SIZE;
     }
-
 }

@@ -2,16 +2,17 @@
 
 pragma solidity ^0.8.18;
 
-import "./StakeManager.sol";
-import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
+import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import { StakeManager } from "./StakeManager.sol";
+
 /**
  * @title StakeVault
  * @author Ricardo Guilherme Schmidt <ricardo3@status.im>
  * @notice Secures user stake
  */
-contract StakeVault is Ownable {
 
+contract StakeVault is Ownable {
     StakeManager private stakeManager;
     ERC20 immutable stakedToken;
 
@@ -52,5 +53,4 @@ contract StakeVault is Ownable {
         require(address(migrated) != address(0), "Migration not available.");
         stakeManager = migrated;
     }
-
 }
