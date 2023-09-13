@@ -1,7 +1,7 @@
 # SNT Staking contracts [![Github Actions][gha-badge]][gha] [![Foundry][foundry-badge]][foundry]
 
-[gha]: https://github.com/vacp2p/foundry-template/actions
-[gha-badge]: https://github.com/vacp2p/foundry-template/actions/workflows/ci.yml/badge.svg
+[gha]: https://github.com/logos-co/staking/actions
+[gha-badge]: https://github.com/logos-co/staking/actions/workflows/ci.yml/badge.svg
 [foundry]: https://getfoundry.sh/
 [foundry-badge]: https://img.shields.io/badge/Built%20with-Foundry-FFDB1C.svg
 
