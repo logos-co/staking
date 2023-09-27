@@ -193,7 +193,7 @@ contract StakeManager is Ownable {
         uint256 deltaTime = processTime - account.lastMint; 
         account.lastMint = processTime;
         uint256 increasedMultiplier = calcMaxMultiplierIncrease(
-            account.balance * (MP_APY * deltaTime),  
+            account.balance * ((MP_APY/52 weeks) * deltaTime),  //TODO: might lose precision, multiply by 100 and divide back later?
             account.multiplier);
         account.multiplier += increasedMultiplier;
         multiplierSupply += increasedMultiplier;
