@@ -88,6 +88,7 @@ contract StakeManager is Ownable {
     function lock(uint256 _time) external onlyVault {
         Account storage account = accounts[msg.sender];
         processAccount(account, currentEpoch);
+        require(_time < 209 weeks, "Cannot lock for more than 4 years");
         require(block.timestamp + _time > account.lockUntil, "Cannot decrease lock time");
         mintIntialMultiplier(account, _time);
     }
