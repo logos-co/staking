@@ -21,6 +21,8 @@ contract StakeManager is Ownable {
         uint256 startTime;
         uint256 epochReward;   
         uint256 totalSupply; 
+        uint256 expMPsToBeMinted;
+        uint256 stakeIn;
     }
 
     uint256 public constant EPOCH_SIZE = 1 weeks;
@@ -152,7 +154,7 @@ contract StakeManager is Ownable {
 
     function calcMaxMultiplierIncrease(uint256 _increasedMultiplier, uint256 _currentMp) private pure returns(uint256 _maxToIncrease) {
         uint256 newMp = _increasedMultiplier + _currentMp;
-        return newMp > MAX_MP ? MAX_MP - newMp : _increasedMultiplier;
+        return newMp > MAX_MP ? MAX_MP - _currentMp : _increasedMultiplier;
     }
 
     function processEpoch() private {
@@ -164,6 +166,8 @@ contract StakeManager is Ownable {
             //create new epoch
             currentEpoch++;
             epochs[currentEpoch].startTime = block.timestamp;
+            epochs[currentEpoch].expMPsToBeMinted = stakeSupply*MP_APY/52;
+            epochs[currentEpoch].stakeIn = stakeSupply;
         }
     }
 
@@ -177,7 +181,8 @@ contract StakeManager is Ownable {
             //mint multipliers to that epoch
             mintMultiplier(account, iEpoch.startTime + EPOCH_SIZE);
             uint256 userSupply = account.balance + account.multiplier;
-            uint256 userShare = userSupply / iEpoch.totalSupply; //TODO: might lose precision, multiply by 100 and divide back later?
+            uint256 epochSupply = iEpoch.stakeIn + iEpoch.expMPsToBeMinted;
+            uint256 userShare = userSupply / epochSupply; //TODO: might lose precision, multiply by 100 and divide back later?
             userReward += userShare * iEpoch.epochReward; 
         }
         account.epoch = userEpoch;
@@ -195,6 +200,7 @@ contract StakeManager is Ownable {
         uint256 increasedMultiplier = calcMaxMultiplierIncrease(
             account.balance * (MP_APY * deltaTime),  
             account.multiplier);
+        iEpoch.expMPsToBeMinted += account.balance * (MP_APY * deltaTime)-increasedMultiplier //TODO:this might need to be returned and done in the loop
         account.multiplier += increasedMultiplier;
         multiplierSupply += increasedMultiplier;
     }
