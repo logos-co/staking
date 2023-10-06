@@ -1,7 +1,9 @@
-# SNT Staking contracts [![Github Actions][gha-badge]][gha] [![Foundry][foundry-badge]][foundry]
+# SNT Staking contracts [![Github Actions][gha-badge]][gha] [![Codecov][codecov-badge]] [codecov] [![Foundry][foundry-badge]][foundry]
 
 [gha]: https://github.com/logos-co/staking/actions
 [gha-badge]: https://github.com/logos-co/staking/actions/workflows/ci.yml/badge.svg
+[codecov]: https://codecov.io/gh/logos-co/staking
+[codecov-badge]: https://codecov.io/gh/logos-co/staking/graph/badge.svg
 [foundry]: https://getfoundry.sh/
 [foundry-badge]: https://img.shields.io/badge/Built%20with-Foundry-FFDB1C.svg
 
