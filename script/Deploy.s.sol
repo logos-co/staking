@@ -8,7 +8,7 @@ import { StakeManager } from "../contracts/StakeManager.sol";
 contract Deploy is BaseScript {
     function run() public returns (StakeManager, DeploymentConfig) {
         DeploymentConfig deploymentConfig = new DeploymentConfig(broadcaster);
-        (address token,) = deploymentConfig.activeNetworkConfig();
+        (, address token) = deploymentConfig.activeNetworkConfig();
 
         vm.startBroadcast(broadcaster);
         StakeManager stakeManager = new StakeManager(token, address(0));
