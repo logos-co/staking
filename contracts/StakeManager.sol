@@ -7,6 +7,8 @@ import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 import { StakeVault } from "./StakeVault.sol";
 
 contract StakeManager is Ownable {
+    error StakeManager__SenderIsNotVault();
+
     struct Account {
         uint256 lockUntil;
         uint256 balance;
@@ -40,7 +42,9 @@ contract StakeManager is Ownable {
     ERC20 public immutable stakedToken;
 
     modifier onlyVault() {
-        require(isVault[msg.sender.codehash], "Not a vault");
+        if (!isVault[msg.sender.codehash]) {
+            revert StakeManager__SenderIsNotVault();
+        }
         _;
     }
 

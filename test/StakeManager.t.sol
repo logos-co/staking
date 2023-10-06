@@ -30,3 +30,58 @@ contract StakeManagerTest is Test {
         assertEq(stakeManager.totalSupply(), 0);
     }
 }
+
+contract StakeTest is StakeManagerTest {
+    function setUp() public override {
+        StakeManagerTest.setUp();
+    }
+
+    function test_RevertWhen_SenderIsNotVault() public {
+        vm.expectRevert(StakeManager.StakeManager__SenderIsNotVault.selector);
+        stakeManager.stake(100, 1);
+    }
+}
+
+contract UnstakeTest is StakeManagerTest {
+    function setUp() public override {
+        StakeManagerTest.setUp();
+    }
+
+    function test_RevertWhen_SenderIsNotVault() public {
+        vm.expectRevert(StakeManager.StakeManager__SenderIsNotVault.selector);
+        stakeManager.unstake(100);
+    }
+}
+
+contract LockTest is StakeManagerTest {
+    function setUp() public override {
+        StakeManagerTest.setUp();
+    }
+
+    function test_RevertWhen_SenderIsNotVault() public {
+        vm.expectRevert(StakeManager.StakeManager__SenderIsNotVault.selector);
+        stakeManager.lock(100);
+    }
+}
+
+contract LeaveTest is StakeManagerTest {
+    function setUp() public override {
+        StakeManagerTest.setUp();
+    }
+
+    function test_RevertWhen_SenderIsNotVault() public {
+        vm.expectRevert(StakeManager.StakeManager__SenderIsNotVault.selector);
+        stakeManager.leave();
+    }
+}
+
+contract MigrateTest is StakeManagerTest {
+    function setUp() public override {
+        StakeManagerTest.setUp();
+    }
+
+    function test_RevertWhen_SenderIsNotVault() public {
+        vm.expectRevert(StakeManager.StakeManager__SenderIsNotVault.selector);
+        stakeManager.migrate();
+    }
+}
