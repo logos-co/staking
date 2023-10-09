@@ -8,6 +8,7 @@ import { StakeVault } from "./StakeVault.sol";
 
 contract StakeManager is Ownable {
     error StakeManager__SenderIsNotVault();
+    error StakeManager__FundsLocked();
 
     struct Account {
         uint256 lockUntil;
@@ -74,7 +75,9 @@ contract StakeManager is Ownable {
      */
     function unstake(uint256 _amount) external onlyVault {
         Account storage account = accounts[msg.sender];
-        require(account.lockUntil <= block.timestamp, "Funds are locked");
+        if (account.lockUntil > block.timestamp) {
+            revert StakeManager__FundsLocked();
+        }
         processAccount(account, currentEpoch);
         uint256 reducedMultiplier = (_amount * account.multiplier) / account.balance;
         account.multiplier -= reducedMultiplier;
