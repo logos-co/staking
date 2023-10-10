@@ -9,6 +9,11 @@ import { StakeVault } from "./StakeVault.sol";
 contract StakeManager is Ownable {
     error StakeManager__SenderIsNotVault();
     error StakeManager__FundsLocked();
+    error StakeManager__DecreasingLockTime();
+    error StakeManager__NoPendingMigration();
+    error StakeManager__PendingMigration();
+    error StakeManager__SenderIsNotPreviousStakeManager();
+    error StakeManager__InvalidLimitEpoch();
 
     struct Account {
         uint256 lockUntil;
@@ -93,7 +98,9 @@ contract StakeManager is Ownable {
     function lock(uint256 _time) external onlyVault {
         Account storage account = accounts[msg.sender];
         processAccount(account, currentEpoch);
-        require(block.timestamp + _time > account.lockUntil, "Cannot decrease lock time");
+        if (block.timestamp + _time < account.lockUntil) {
+            revert StakeManager__DecreasingLockTime();
+        }
         mintIntialMultiplier(account, _time, account.balance, 0);
     }
 
@@ -101,7 +108,9 @@ contract StakeManager is Ownable {
      * @notice leave without processing account
      */
     function leave() external onlyVault {
-        require(address(migration) != address(0), "Leave only during migration");
+        if (address(migration) == address(0)) {
+            revert StakeManager__NoPendingMigration();
+        }
         Account memory account = accounts[msg.sender];
         delete accounts[msg.sender];
         multiplierSupply -= account.multiplier;
@@ -136,7 +145,9 @@ contract StakeManager is Ownable {
      */
 
     function migrate() external onlyVault returns (StakeManager newManager) {
-        require(address(migration) != address(0), "Migration not available");
+        if (address(migration) == address(0)) {
+            revert StakeManager__NoPendingMigration();
+        }
         Account storage account = accounts[msg.sender];
         stakedToken.approve(address(migration), account.balance);
         migration.migrate(msg.sender, account);
@@ -151,7 +162,9 @@ contract StakeManager is Ownable {
      * @param _account Account data
      */
     function migrate(address _vault, Account memory _account) external {
-        require(msg.sender == address(oldManager), "Unauthorized");
+        if (msg.sender != address(oldManager)) {
+            revert StakeManager__SenderIsNotPreviousStakeManager();
+        }
         stakedToken.transferFrom(address(oldManager), address(this), _account.balance);
         accounts[_vault] = _account;
     }
@@ -190,8 +203,12 @@ contract StakeManager is Ownable {
 
     function processAccount(Account storage account, uint256 _limitEpoch) private {
         processEpoch();
-        require(address(migration) == address(0), "Contract ended, please migrate");
-        require(_limitEpoch <= currentEpoch, "Non-sense call");
+        if (address(migration) != address(0)) {
+            revert StakeManager__PendingMigration();
+        }
+        if (_limitEpoch > currentEpoch) {
+            revert StakeManager__InvalidLimitEpoch();
+        }
         uint256 userReward;
         uint256 userEpoch = account.epoch;
         for (Epoch memory iEpoch = epochs[userEpoch]; userEpoch < _limitEpoch; userEpoch++) {
