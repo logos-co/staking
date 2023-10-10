@@ -29,7 +29,7 @@ contract DeploymentConfig is Script {
     }
 
     function getOrCreateAnvilEthConfig(address _deployer) public returns (NetworkConfig memory) {
-        vm.startBroadcast();
+        vm.startBroadcast(_deployer);
         MockERC20 token = new MockERC20();
         vm.stopBroadcast();
         return NetworkConfig({ token: address(token), deployer: _deployer });
