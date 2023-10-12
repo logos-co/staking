@@ -13,6 +13,8 @@ import { StakeManager } from "./StakeManager.sol";
  */
 
 contract StakeVault is Ownable {
+    error StakeVault__MigrationNotAvailable();
+
     StakeManager private stakeManager;
     ERC20 immutable stakedToken;
 
@@ -50,7 +52,7 @@ contract StakeVault is Ownable {
      */
     function updateManager() external onlyOwner {
         StakeManager migrated = stakeManager.migrate();
-        require(address(migrated) != address(0), "Migration not available.");
+        if (address(migrated) == address(0)) revert StakeVault__MigrationNotAvailable();
         stakeManager = migrated;
     }
 }
