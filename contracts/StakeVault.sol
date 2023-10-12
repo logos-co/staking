@@ -16,18 +16,19 @@ contract StakeVault is Ownable {
     error StakeVault__MigrationNotAvailable();
 
     StakeManager private stakeManager;
-    ERC20 immutable stakedToken;
+
+    ERC20 private immutable STAKED_TOKEN;
 
     event Staked(address from, address to, uint256 _amount, uint256 time);
 
     constructor(address _owner, ERC20 _stakedToken, StakeManager _stakeManager) {
         _transferOwnership(_owner);
-        stakedToken = _stakedToken;
+        STAKED_TOKEN = _stakedToken;
         stakeManager = _stakeManager;
     }
 
     function stake(uint256 _amount, uint256 _time) external onlyOwner {
-        stakedToken.transferFrom(msg.sender, address(this), _amount);
+        STAKED_TOKEN.transferFrom(msg.sender, address(this), _amount);
         stakeManager.stake(_amount, _time);
 
         emit Staked(msg.sender, address(this), _amount, _time);
@@ -39,12 +40,12 @@ contract StakeVault is Ownable {
 
     function unstake(uint256 _amount) external onlyOwner {
         stakeManager.unstake(_amount);
-        stakedToken.transferFrom(address(this), msg.sender, _amount);
+        STAKED_TOKEN.transferFrom(address(this), msg.sender, _amount);
     }
 
     function leave() external onlyOwner {
         stakeManager.leave();
-        stakedToken.transferFrom(address(this), msg.sender, stakedToken.balanceOf(address(this)));
+        STAKED_TOKEN.transferFrom(address(this), msg.sender, STAKED_TOKEN.balanceOf(address(this)));
     }
 
     /**
@@ -54,5 +55,9 @@ contract StakeVault is Ownable {
         StakeManager migrated = stakeManager.migrate();
         if (address(migrated) == address(0)) revert StakeVault__MigrationNotAvailable();
         stakeManager = migrated;
+    }
+
+    function stakedToken() external view returns (ERC20) {
+        return STAKED_TOKEN;
     }
 }
