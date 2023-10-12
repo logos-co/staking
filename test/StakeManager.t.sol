@@ -8,10 +8,12 @@ import { Deploy } from "../script/Deploy.s.sol";
 import { DeploymentConfig } from "../script/DeploymentConfig.s.sol";
 import { StakeManager } from "../contracts/StakeManager.sol";
 import { StakeVault } from "../contracts/StakeVault.sol";
+import { VaultFactory } from "../contracts/VaultFactory.sol";
 
 contract StakeManagerTest is Test {
     DeploymentConfig internal deploymentConfig;
     StakeManager internal stakeManager;
+    VaultFactory internal vaultFactory;
 
     address internal stakeToken;
     address internal deployer;
@@ -19,7 +21,7 @@ contract StakeManagerTest is Test {
 
     function setUp() public virtual {
         Deploy deployment = new Deploy();
-        (stakeManager, deploymentConfig) = deployment.run();
+        (vaultFactory, stakeManager, deploymentConfig) = deployment.run();
         (deployer, stakeToken) = deploymentConfig.activeNetworkConfig();
     }
 
@@ -36,7 +38,7 @@ contract StakeManagerTest is Test {
 
     function _createTestVault(address owner) internal returns (StakeVault vault) {
         vm.prank(owner);
-        vault = new StakeVault(owner, ERC20(stakeToken), stakeManager);
+        vault = vaultFactory.createVault();
 
         vm.prank(deployer);
         stakeManager.setVault(address(vault).codehash);

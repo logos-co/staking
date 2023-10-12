@@ -1,18 +1,19 @@
 // SPDX-License-Identifier: UNLICENSED
 pragma solidity ^0.8.19;
 
-import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-
 import { Test } from "forge-std/Test.sol";
 import { Deploy } from "../script/Deploy.s.sol";
 import { DeploymentConfig } from "../script/DeploymentConfig.s.sol";
 import { StakeManager } from "../contracts/StakeManager.sol";
 import { StakeVault } from "../contracts/StakeVault.sol";
+import { VaultFactory } from "../contracts/VaultFactory.sol";
 
 contract StakeVaultTest is Test {
     StakeManager internal stakeManager;
 
     DeploymentConfig internal deploymentConfig;
+
+    VaultFactory internal vaultFactory;
 
     StakeVault internal stakeVault;
 
@@ -24,11 +25,11 @@ contract StakeVaultTest is Test {
 
     function setUp() public virtual {
         Deploy deployment = new Deploy();
-        (stakeManager, deploymentConfig) = deployment.run();
+        (vaultFactory, stakeManager, deploymentConfig) = deployment.run();
         (deployer, stakeToken) = deploymentConfig.activeNetworkConfig();
 
         vm.prank(testUser);
-        stakeVault = new StakeVault(testUser, ERC20(stakeToken), stakeManager);
+        stakeVault = vaultFactory.createVault();
     }
 }
 
