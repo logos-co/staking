@@ -14,6 +14,7 @@ contract StakeManager is Ownable {
     error StakeManager__PendingMigration();
     error StakeManager__SenderIsNotPreviousStakeManager();
     error StakeManager__InvalidLimitEpoch();
+    error StakeManager__InvalidLockupPeriod();
 
     struct Account {
         uint256 lockUntil;
@@ -32,6 +33,8 @@ contract StakeManager is Ownable {
 
     uint256 public constant EPOCH_SIZE = 1 weeks;
     uint256 public constant YEAR = 365 days;
+    uint256 public constant MIN_LOCKUP_PERIOD = 12 weeks; // 3 months
+    uint256 public constant MAX_LOCKUP_PERIOD = 4 * YEAR; // 4 years
     uint256 public constant MP_APY = 1;
     uint256 public constant MAX_BOOST = 4;
 
@@ -64,8 +67,13 @@ contract StakeManager is Ownable {
      * Increases balance of msg.sender;
      * @param _amount Amount of balance to be decreased.
      * @param _time Seconds from block.timestamp to lock balance.
+     *
+     * @dev Reverts when `_time` is not in range of [MIN_LOCKUP_PERIOD, MAX_LOCKUP_PERIOD]
      */
     function stake(uint256 _amount, uint256 _time) external onlyVault {
+        if (_time > 0 && (_time < MIN_LOCKUP_PERIOD || _time > MAX_LOCKUP_PERIOD)) {
+            revert StakeManager__InvalidLockupPeriod();
+        }
         Account storage account = accounts[msg.sender];
         processAccount(account, currentEpoch);
         account.balance += _amount;
@@ -94,8 +102,14 @@ contract StakeManager is Ownable {
     /**
      * @notice Locks entire balance for more amount of time.
      * @param _time amount of time to lock from now.
+     *
+     * @dev Reverts when `_time` is bigger than `MAX_LOCKUP_PERIOD`
+     * @dev Reverts when `_time + block.timestamp` is smaller than current lock time.
      */
     function lock(uint256 _time) external onlyVault {
+        if (_time > MAX_LOCKUP_PERIOD) {
+            revert StakeManager__InvalidLockupPeriod();
+        }
         Account storage account = accounts[msg.sender];
         processAccount(account, currentEpoch);
         if (block.timestamp + _time < account.lockUntil) {
