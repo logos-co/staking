@@ -54,6 +54,23 @@ contract StakeTest is StakeManagerTest {
         vm.expectRevert(StakeManager.StakeManager__SenderIsNotVault.selector);
         stakeManager.stake(100, 1);
     }
+
+    function test_RevertWhen_InvalidLockupPeriod() public {
+        // ensure user has funds
+        deal(stakeToken, testUser, 1000);
+        StakeVault userVault = _createTestVault(testUser);
+
+        vm.startPrank(testUser);
+        ERC20(stakeToken).approve(address(userVault), 100);
+
+        uint256 lockTime = stakeManager.MIN_LOCKUP_PERIOD() - 1;
+        vm.expectRevert(StakeManager.StakeManager__InvalidLockupPeriod.selector);
+        userVault.stake(100, lockTime);
+
+        lockTime = stakeManager.MAX_LOCKUP_PERIOD() + 1;
+        vm.expectRevert(StakeManager.StakeManager__InvalidLockupPeriod.selector);
+        userVault.stake(100, lockTime);
+    }
 }
 
 contract UnstakeTest is StakeManagerTest {
@@ -74,7 +91,7 @@ contract UnstakeTest is StakeManagerTest {
         vm.startPrank(testUser);
         ERC20(stakeToken).approve(address(userVault), 100);
 
-        uint256 lockTime = 1 days;
+        uint256 lockTime = stakeManager.MIN_LOCKUP_PERIOD();
         userVault.stake(100, lockTime);
 
         vm.expectRevert(StakeManager.StakeManager__FundsLocked.selector);
@@ -92,6 +109,20 @@ contract LockTest is StakeManagerTest {
         stakeManager.lock(100);
     }
 
+    function test_RevertWhen_InvalidLockupPeriod() public {
+        // ensure user has funds
+        deal(stakeToken, testUser, 1000);
+        StakeVault userVault = _createTestVault(testUser);
+
+        vm.startPrank(testUser);
+        // ensure user vault can spend user tokens
+        ERC20(stakeToken).approve(address(userVault), 100);
+
+        uint256 lockTime = stakeManager.MAX_LOCKUP_PERIOD() + 1;
+        vm.expectRevert(StakeManager.StakeManager__InvalidLockupPeriod.selector);
+        userVault.stake(100, lockTime);
+    }
+
     function test_RevertWhen_DecreasingLockTime() public {
         // ensure user has funds
         deal(stakeToken, testUser, 1000);
@@ -101,7 +132,7 @@ contract LockTest is StakeManagerTest {
         // ensure user vault can spend user tokens
         ERC20(stakeToken).approve(address(userVault), 100);
 
-        uint256 lockTime = 1 days;
+        uint256 lockTime = stakeManager.MIN_LOCKUP_PERIOD() + 1;
         userVault.stake(100, lockTime);
 
         vm.expectRevert(StakeManager.StakeManager__DecreasingLockTime.selector);
@@ -157,7 +188,7 @@ contract ExecuteAccountTest is StakeManagerTest {
         vm.startPrank(testUser);
         ERC20(stakeToken).approve(address(userVault), 100);
 
-        uint256 lockTime = 1 days;
+        uint256 lockTime = stakeManager.MIN_LOCKUP_PERIOD();
         userVault.stake(100, lockTime);
 
         uint256 currentEpoch = stakeManager.currentEpoch();
