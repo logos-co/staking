@@ -1,0 +1,4 @@
+
+rule shouldPass {
+  assert true;
+}

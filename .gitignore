@@ -22,3 +22,5 @@ artifacts
 typechain
 typechain-types
 gmx-contracts
+
+.certora_internal
