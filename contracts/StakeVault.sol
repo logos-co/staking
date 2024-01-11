@@ -14,6 +14,10 @@ import { StakeManager } from "./StakeManager.sol";
 contract StakeVault is Ownable {
     error StakeVault__MigrationNotAvailable();
 
+    error StakeVault__StakingFailed();
+
+    error StakeVault__UnstakingFailed();
+
     StakeManager private stakeManager;
 
     ERC20 private immutable STAKED_TOKEN;
@@ -27,7 +31,10 @@ contract StakeVault is Ownable {
     }
 
     function stake(uint256 _amount, uint256 _time) external onlyOwner {
-        STAKED_TOKEN.transferFrom(msg.sender, address(this), _amount);
+        bool success = STAKED_TOKEN.transferFrom(msg.sender, address(this), _amount);
+        if (!success) {
+            revert StakeVault__StakingFailed();
+        }
         stakeManager.stake(_amount, _time);
 
         emit Staked(msg.sender, address(this), _amount, _time);
@@ -39,7 +46,10 @@ contract StakeVault is Ownable {
 
     function unstake(uint256 _amount) external onlyOwner {
         stakeManager.unstake(_amount);
-        STAKED_TOKEN.transferFrom(address(this), msg.sender, _amount);
+        bool success = STAKED_TOKEN.transfer(msg.sender, _amount);
+        if (!success) {
+            revert StakeVault__UnstakingFailed();
+        }
     }
 
     function leave() external onlyOwner {

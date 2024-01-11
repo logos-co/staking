@@ -97,6 +97,24 @@ contract UnstakeTest is StakeManagerTest {
         vm.expectRevert(StakeManager.StakeManager__FundsLocked.selector);
         userVault.unstake(100);
     }
+
+    function test_UnstakeShouldReturnFunds() public {
+        // ensure user has funds
+        deal(stakeToken, testUser, 1000);
+        StakeVault userVault = _createTestVault(testUser);
+
+        vm.startPrank(testUser);
+        ERC20(stakeToken).approve(address(userVault), 100);
+
+        userVault.stake(100, 0);
+        assertEq(ERC20(stakeToken).balanceOf(testUser), 900);
+
+        userVault.unstake(100);
+
+        assertEq(stakeManager.stakeSupply(), 0);
+        assertEq(ERC20(stakeToken).balanceOf(address(userVault)), 0);
+        assertEq(ERC20(stakeToken).balanceOf(testUser), 1000);
+    }
 }
 
 contract LockTest is StakeManagerTest {
