@@ -38,9 +38,9 @@ contract StakeManager is Ownable {
     uint256 public constant MP_APY = 1;
     uint256 public constant MAX_BOOST = 4;
 
-    mapping(address => Account) accounts;
+    mapping(address => Account) public accounts;
     mapping(uint256 => Epoch) epochs;
-    mapping(bytes32 => bool) isVault;
+    mapping(bytes32 => bool) public isVault;
 
     uint256 public currentEpoch;
     uint256 public pendingReward;
