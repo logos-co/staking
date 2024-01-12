@@ -283,4 +283,29 @@ contract UserFlowsTest is StakeManagerTest {
         assertEq(ERC20(stakeToken).balanceOf(address(user2Vault)), 0);
         assertEq(stakeManager.stakeSupply(), 0);
     }
+
+    function test_StakeWithLockUpTimeLocksStake() public {
+        // ensure users have funds
+        deal(stakeToken, testUser, 1000);
+
+        StakeVault userVault = _createTestVault(testUser);
+
+        vm.startPrank(testUser);
+        // approve user vault to spend user tokens
+        ERC20(stakeToken).approve(address(userVault), 100);
+
+        // stake with lockup time of 12 weeks
+        userVault.stake(100, 12 weeks);
+
+        // unstaking should fail as lockup time isn't over yet
+        vm.expectRevert(StakeManager.StakeManager__FundsLocked.selector);
+        userVault.unstake(100);
+
+        // fast forward 12 weeks
+        skip(12 weeks + 1);
+
+        userVault.unstake(100);
+        assertEq(ERC20(stakeToken).balanceOf(address(userVault)), 0);
+        assertEq(stakeManager.stakeSupply(), 0);
+    }
 }
