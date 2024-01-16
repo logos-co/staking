@@ -11,7 +11,6 @@ import { StakeManager } from "./StakeManager.sol";
  * @author Ricardo Guilherme Schmidt <ricardo3@status.im>
  * @notice Secures user stake
  */
-
 contract StakeVault is Ownable {
     error StakeVault__MigrationNotAvailable();
 
