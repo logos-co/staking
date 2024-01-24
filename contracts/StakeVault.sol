@@ -17,7 +17,7 @@ contract StakeVault is Ownable {
 
     StakeManager private stakeManager;
 
-    ERC20 private immutable STAKED_TOKEN;
+    ERC20 public immutable STAKED_TOKEN;
 
     event Staked(address from, address to, uint256 _amount, uint256 time);
 
