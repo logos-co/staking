@@ -53,15 +53,15 @@ contract StakeVault is Ownable {
     }
 
     function leave() external onlyOwner {
-        stakeManager.leave();
+        stakeManager.migrateTo(false);
         STAKED_TOKEN.transferFrom(address(this), msg.sender, STAKED_TOKEN.balanceOf(address(this)));
     }
 
     /**
      * @notice Opt-in migration to a new StakeManager contract.
      */
-    function updateManager() external onlyOwner {
-        StakeManager migrated = stakeManager.migrate();
+    function acceptMigration() external onlyOwner {
+        StakeManager migrated = stakeManager.migrateTo(true);
         if (address(migrated) == address(0)) revert StakeVault__MigrationNotAvailable();
         stakeManager = migrated;
     }

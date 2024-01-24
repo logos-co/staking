@@ -194,11 +194,14 @@ contract LeaveTest is StakeManagerTest {
 
     function test_RevertWhen_SenderIsNotVault() public {
         vm.expectRevert(StakeManager.StakeManager__SenderIsNotVault.selector);
-        stakeManager.leave();
+        stakeManager.migrateTo(false);
     }
 
     function test_RevertWhen_NoPendingMigration() public {
         StakeVault userVault = _createTestVault(testUser);
+        vm.prank(testUser);
+        vm.expectRevert(StakeManager.StakeManager__NoPendingMigration.selector);
+        userVault.acceptMigration();
         vm.prank(testUser);
         vm.expectRevert(StakeManager.StakeManager__NoPendingMigration.selector);
         userVault.leave();
@@ -212,14 +215,14 @@ contract MigrateTest is StakeManagerTest {
 
     function test_RevertWhen_SenderIsNotVault() public {
         vm.expectRevert(StakeManager.StakeManager__SenderIsNotVault.selector);
-        stakeManager.migrate();
+        stakeManager.migrateTo(true);
     }
 
     function test_RevertWhen_NoPendingMigration() public {
         StakeVault userVault = _createTestVault(testUser);
         vm.prank(testUser);
         vm.expectRevert(StakeManager.StakeManager__NoPendingMigration.selector);
-        userVault.updateManager();
+        userVault.acceptMigration();
     }
 }
 
