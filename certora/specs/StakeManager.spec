@@ -42,13 +42,13 @@ ghost mathint sumOfEpochRewards
   init_state axiom sumOfEpochRewards == 0;
 }
 
-ghost mathint sumOfBalances { /* sigma account[u].balance forall u */
-	init_state axiom sumOfBalances == 0;
-}
-
 ghost mathint sumOfMultipliers /* sigma account[u].multiplier forall u */
 {
 	init_state axiom sumOfMultipliers == 0;
+}
+
+ghost mathint sumOfBalances /* sigma account[u].balance forall u */ {
+	init_state axiom sumOfBalances == 0;
 }
 
 hook Sstore epochs[KEY uint256 epochId].epochReward uint256 newValue (uint256 oldValue) STORAGE {
@@ -82,7 +82,6 @@ invariant sumOfEpochRewardsIsPendingRewards()
 
 invariant highEpochsAreNull(uint256 epochNumber)
   epochNumber >= currentContract.currentEpoch => currentContract.epochs[epochNumber].epochReward == 0;
-
 
 rule reachability(method f)
 {
