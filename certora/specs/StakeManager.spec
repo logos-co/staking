@@ -1,6 +1,7 @@
 using ERC20A as staked;
 methods {
   function staked.balanceOf(address) external returns (uint256) envfree; 
+  function stakeSupply() external returns (uint256) envfree; 
 }
 
 function isMigrationfunction(method f) returns bool {
@@ -14,6 +15,25 @@ function isMigrationfunction(method f) returns bool {
 function simplification() {
   require currentContract.migration == 0;  
 }
+
+ghost mathint sumOfBalances ; /* sigma account[u].balance forall u */
+{
+	init_state axiom sumOfBalances == 0;
+} 
+
+hook Sstore accounts[KEY address addr].balance uint256 newValue (uint256 oldValue) STORAGE {
+    sumOfBalances = sumOfBalances - oldValue + newValue;
+}
+
+/*
+//no need for this 
+hook Sload uint256 balance _balances[KEY address addr] STORAGE {
+    require sumOfBalances >= to_mathint(balance);
+}
+*/
+
+invariant sumOfBalancesIsStakeSupply()
+      sumOfBalances == to_mathint(stakeSupply());
 
 
 rule reachability(method f) 
