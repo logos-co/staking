@@ -4,18 +4,23 @@ methods {
   function totalSupplyBalance() external returns (uint256) envfree;
   function totalSupplyMP() external returns (uint256) envfree;
   function oldManager() external returns (address) envfree;
-  function _.migrateFrom(address, bool, StakeManager.Account) external => NONDET;
-  function _.increaseMPFromMigration(uint256) external => NONDET;
-  function _.migrationInitialize(uint256,uint256,uint256,uint256) external => NONDET;
-
   function accounts(address) external returns(address, uint256, uint256, uint256, uint256, uint256, uint256) envfree;
+  function _.migrate(address, StakeManager.Account) external => NONDET;
+  function _.increaseMPFromMigration(uint256) external => DISPATCHER(true);
 }
 
-function getAccountMultiplierPoints(address addr) returns uint256 {
-  uint256 multiplierPoints;
-  _, _, _, multiplierPoints, _, _, _ = accounts(addr);
+function getAccountInitialMultiplierPoints(address addr) returns uint256 {
+  uint256 initialMP;
+  _, _, initialMP, _, _, _, _ = accounts(addr);
 
-  return multiplierPoints;
+  return initialMP;
+}
+
+function getAccountCurrentMultiplierPoints(address addr) returns uint256 {
+  uint256 currentMP;
+  _, _, _, currentMP, _, _, _ = accounts(addr);
+
+  return currentMP;
 }
 
 function getAccountBalance(address addr) returns uint256 {
@@ -79,17 +84,23 @@ hook Sstore accounts[KEY address addr].currentMP uint256 newValue (uint256 oldVa
 invariant sumOfBalancesIsTotalSupplyBalance()
   sumOfBalances == to_mathint(totalSupplyBalance())
   filtered {
-    m -> !requiresPreviousManager(m) && !requiresNextManager(m)
+    m -> !requiresPreviousManager(m) && !requiresNextManager(m) && m.selector != sig:startMigration(address).selector
   }
 
 invariant sumOfMultipliersIsMultiplierSupply()
   sumOfMultipliers == to_mathint(totalSupplyMP())
   filtered {
-    m -> !requiresPreviousManager(m) && !requiresNextManager(m)
+    m -> !requiresPreviousManager(m) && !requiresNextManager(m) && m.selector != sig:startMigration(address).selector
+  } {
+    preserved with (env e) { simplification(e); }
   }
+
 
 invariant sumOfEpochRewardsIsPendingRewards()
   sumOfEpochRewards == to_mathint(currentContract.pendingReward)
+  filtered {
+    m -> !requiresPreviousManager(m) && !requiresNextManager(m) && m.selector != sig:startMigration(address).selector
+  }
   { preserved {
     requireInvariant highEpochsAreNull(currentContract.currentEpoch);
   }
@@ -107,6 +118,49 @@ rule reachability(method f)
   env e;
   f(e,args);
   satisfy true;
+}
+
+invariant MPcantBeGreaterThanMaxMP(address addr)
+  to_mathint(getAccountInitialMultiplierPoints(addr)) <= getAccountBalance(addr) * 8;
+
+rule stakingMintsMultiplierPoints1To1Ratio {
+
+  env e;
+  uint256 amount;
+  uint256 lockupTime;
+  uint256 multiplierPointsBefore;
+  uint256 multiplierPointsAfter;
+
+  require getAccountInitialMultiplierPoints(e.msg.sender) >= getAccountBalance(e.msg.sender);
+  require getAccountCurrentMultiplierPoints(e.msg.sender) >= getAccountInitialMultiplierPoints(e.msg.sender);
+
+  multiplierPointsBefore = getAccountInitialMultiplierPoints(e.msg.sender);
+  stake(e, amount, lockupTime);
+  multiplierPointsAfter = getAccountInitialMultiplierPoints(e.msg.sender);
+
+  assert lockupTime == 0 => to_mathint(multiplierPointsAfter) == multiplierPointsBefore + amount;
+  assert to_mathint(multiplierPointsAfter) >= multiplierPointsBefore + amount;
+}
+
+rule stakingGreaterLockupTimeMeansGreaterMPs {
+
+  env e;
+  uint256 amount;
+  uint256 lockupTime1;
+  uint256 lockupTime2;
+  uint256 multiplierPointsAfter1;
+  uint256 multiplierPointsAfter2;
+
+  storage initalStorage = lastStorage;
+
+  stake(e, amount, lockupTime1);
+  multiplierPointsAfter1 = getAccountInitialMultiplierPoints(e.msg.sender);
+
+  stake(e, amount, lockupTime2) at initalStorage;
+  multiplierPointsAfter2 = getAccountInitialMultiplierPoints(e.msg.sender);
+
+  assert lockupTime1 >= lockupTime2 => to_mathint(multiplierPointsAfter1) >= to_mathint(multiplierPointsAfter2);
+  satisfy to_mathint(multiplierPointsAfter1) > to_mathint(multiplierPointsAfter2);
 }
 
 /**
