@@ -6,6 +6,21 @@ methods {
   function multiplierSupply() external returns (uint256) envfree;
   function oldManager() external returns (address) envfree;
   function _.migrate(address, StakeManager.Account) external => NONDET;
+  function accounts(address) external returns(uint256, uint256, uint256, uint256, uint256, address) envfree;
+}
+
+function getAccountMultiplierPoints(address addr) returns uint256 {
+  uint256 multiplierPoints;
+  _, _, multiplierPoints, _, _, _ = accounts(addr);
+
+  return multiplierPoints;
+}
+
+function getAccountBalance(address addr) returns uint256 {
+  uint256 balance;
+  _, balance, _, _, _, _ = accounts(addr);
+
+  return balance;
 }
 
 function isMigrationfunction(method f) returns bool {
@@ -34,6 +49,7 @@ ghost mathint sumOfMultipliers /* sigma account[u].multiplier forall u */
 
 hook Sstore accounts[KEY address addr].balance uint256 newValue (uint256 oldValue) STORAGE {
     sumOfBalances = sumOfBalances - oldValue + newValue;
+}
 
 hook Sstore accounts[KEY address addr].multiplier uint256 newValue (uint256 oldValue) STORAGE {
     sumOfMultipliers = sumOfMultipliers - oldValue + newValue;
@@ -63,6 +79,48 @@ rule reachability(method f)
   env e;
   f(e,args);
   satisfy true;
+}
+
+invariant MPcantBeGreaterThanMaxMP(address addr)
+  to_mathint(getAccountMultiplierPoints(addr)) <= getAccountBalance(addr) * 8;
+
+rule stakingMintsMultiplierPoints1To1Ratio {
+
+  env e;
+  uint256 amount;
+  uint256 lockupTime;
+  uint256 multiplierPointsBefore;
+  uint256 multiplierPointsAfter;
+
+  multiplierPointsBefore = getAccountMultiplierPoints(e.msg.sender);
+  stake(e, amount, lockupTime);
+  multiplierPointsAfter = getAccountMultiplierPoints(e.msg.sender);
+
+  assert lockupTime == 0 => to_mathint(multiplierPointsAfter) == multiplierPointsBefore + amount;
+  assert to_mathint(multiplierPointsAfter) >= multiplierPointsBefore + amount;
+}
+
+rule stakingGreaterLockupTimeMeansGreaterMPs {
+
+  env e;
+  uint256 amount;
+  uint256 lockupTime1;
+  uint256 lockupTime2;
+  uint256 multiplierPointsAfter1;
+  uint256 multiplierPointsAfter2;
+
+  //require getAccountMultiplierPoints(e.msg.sender) == 0;
+
+  storage initalStorage = lastStorage;
+
+  stake(e, amount, lockupTime1);
+  multiplierPointsAfter1 = getAccountMultiplierPoints(e.msg.sender);
+
+  stake(e, amount, lockupTime2) at initalStorage;
+  multiplierPointsAfter2 = getAccountMultiplierPoints(e.msg.sender);
+
+  assert lockupTime1 >= lockupTime2 => to_mathint(multiplierPointsAfter1) >= to_mathint(multiplierPointsAfter2);
+  satisfy to_mathint(multiplierPointsAfter1) > to_mathint(multiplierPointsAfter2);
 }
 
 /**
