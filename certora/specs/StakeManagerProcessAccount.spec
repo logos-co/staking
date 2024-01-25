@@ -13,19 +13,39 @@ function simplification() {
   require currentContract.migration == 0;  
 }
 
-ghost mapping (address => uint256) accountProccsed;
+ghost mapping (address => mathint) accountProccsed;
+// balance changed in an epoch thart was processed
+ghost mapping (address => mathint) balanceChangedInEpoch;
 
 function markAccountProccessed(address account, uint256 _limitEpoch) {
-    accountProccsed[account] = _limitEpoch;
+    accountProccsed[account] = to_mathint(_limitEpoch); 
 }
 
-rule whenAccountProccsed(method f) {
+hook Sstore accounts[KEY address addr].balance uint256 newValue (uint256 oldValue) STORAGE {
+    balanceChangedInEpoch[addr] = accountProccsed[addr];
+}
+
+
+/*
+if a balance of an acocunthas changed,
+his account should have beeen process up to the currentEpoch
+
+verified on two mutations:
+https://prover.certora.com/output/40726/68668bbb7b6e49828da8521c3425a20b/?anonymousKey=015fce76d5d66ef40de8342b75fda4cff1dfdd57
+https://prover.certora.com/output/40726/055d52bc67154e3fbea330fd7d68d36d/?anonymousKey=73030555b4cefe429d4eed6718b9a7e5be3a22c8
+
+*/
+rule checkAccountProccsedBeforeStoring(method f) {
   address account;
-  uint256 before = accountProccsed[account];
+
+  mathint lastChanged = balanceChangedInEpoch[account]; 
   env e;
   calldataarg args;
   f(e,args);
-  assert before == accountProccsed[account];
+  
+  assert  balanceChangedInEpoch[account] != lastChanged  =>   
+          balanceChangedInEpoch[account] == to_mathint(currentContract.currentEpoch);
+  
 }
 
 rule whoChangeERC20Balance(  method f ) filtered { f -> f.contract != staked }
