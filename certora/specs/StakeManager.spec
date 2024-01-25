@@ -22,7 +22,7 @@ function simplification(env e) {
   require currentContract.migration == 0;
 }
 
-ghost mathint sumOfBalances /* sigma account[u].balance forall u */
+ghost mathint sumOfBalances  /* sigma account[u].balance forall u */
 {
 	init_state axiom sumOfBalances == 0;
 }
