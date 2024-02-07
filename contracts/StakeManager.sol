@@ -165,7 +165,10 @@ contract StakeManager is Ownable {
         Account storage account = accounts[msg.sender];
         stakedToken.approve(address(migration), account.balance);
         migration.migrate(msg.sender, account);
+
+        multiplierSupply -= accounts[msg.sender].multiplier;
         delete accounts[msg.sender];
+
         return migration;
     }
 
