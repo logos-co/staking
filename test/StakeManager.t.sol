@@ -30,8 +30,8 @@ contract StakeManagerTest is Test {
         assertEq(stakeManager.owner(), deployer);
         assertEq(stakeManager.currentEpoch(), 0);
         assertEq(stakeManager.pendingReward(), 0);
-        assertEq(stakeManager.multiplierSupply(), 0);
-        assertEq(stakeManager.stakeSupply(), 0);
+        assertEq(stakeManager.totalSupplyMP(), 0);
+        assertEq(stakeManager.totalSupplyBalance(), 0);
         assertEq(address(stakeManager.stakedToken()), stakeToken);
         assertEq(address(stakeManager.oldManager()), address(0));
         assertEq(stakeManager.totalSupply(), 0);
@@ -86,19 +86,19 @@ contract StakeTest is StakeManagerTest {
         // stake without lockup time
         userVault.stake(100, 0);
 
-        (,, uint256 multiplierPoints,,,) = stakeManager.accounts(address(userVault));
+        (,, uint256 currentMP,,,,) = stakeManager.accounts(address(userVault));
 
         // total multiplier poitn supply
-        assertEq(stakeManager.multiplierSupply(), 100);
+        assertEq(stakeManager.totalSupplyMP(), 100);
         // user multiplier points
-        assertEq(multiplierPoints, 100);
+        assertEq(currentMP, 100);
 
         userVault.unstake(100);
 
         // multiplierpoints are burned after unstaking
-        (,, multiplierPoints,,,) = stakeManager.accounts(address(userVault));
-        assertEq(stakeManager.multiplierSupply(), 0);
-        assertEq(multiplierPoints, 0);
+        (,,, currentMP,,,) = stakeManager.accounts(address(userVault));
+        assertEq(stakeManager.totalSupplyMP(), 0);
+        assertEq(currentMP, 0);
     }
 }
 
@@ -109,7 +109,7 @@ contract UnstakeTest is StakeManagerTest {
 
     function test_RevertWhen_SenderIsNotVault() public {
         vm.expectRevert(StakeManager.StakeManager__SenderIsNotVault.selector);
-        stakeManager.unstake(100);
+        stakeManager.unstake(1);
     }
 
     function test_RevertWhen_FundsLocked() public {
@@ -124,7 +124,7 @@ contract UnstakeTest is StakeManagerTest {
         userVault.stake(100, lockTime);
 
         vm.expectRevert(StakeManager.StakeManager__FundsLocked.selector);
-        userVault.unstake(100);
+        userVault.unstake(1);
     }
 
     function test_UnstakeShouldReturnFunds() public {
@@ -140,7 +140,7 @@ contract UnstakeTest is StakeManagerTest {
 
         userVault.unstake(100);
 
-        assertEq(stakeManager.stakeSupply(), 0);
+        assertEq(stakeManager.totalSupplyBalance(), 0);
         assertEq(ERC20(stakeToken).balanceOf(address(userVault)), 0);
         assertEq(ERC20(stakeToken).balanceOf(testUser), 1000);
     }
@@ -169,22 +169,6 @@ contract LockTest is StakeManagerTest {
         vm.expectRevert(StakeManager.StakeManager__InvalidLockupPeriod.selector);
         userVault.stake(100, lockTime);
     }
-
-    function test_RevertWhen_DecreasingLockTime() public {
-        // ensure user has funds
-        deal(stakeToken, testUser, 1000);
-        StakeVault userVault = _createTestVault(testUser);
-
-        vm.startPrank(testUser);
-        // ensure user vault can spend user tokens
-        ERC20(stakeToken).approve(address(userVault), 100);
-
-        uint256 lockTime = stakeManager.MIN_LOCKUP_PERIOD() + 1;
-        userVault.stake(100, lockTime);
-
-        vm.expectRevert(StakeManager.StakeManager__DecreasingLockTime.selector);
-        userVault.lock(1);
-    }
 }
 
 contract LeaveTest is StakeManagerTest {
@@ -198,13 +182,21 @@ contract LeaveTest is StakeManagerTest {
     }
 
     function test_RevertWhen_NoPendingMigration() public {
+        deal(stakeToken, testUser, 1000);
         StakeVault userVault = _createTestVault(testUser);
-        vm.prank(testUser);
+
+        vm.startPrank(testUser);
+        ERC20(stakeToken).approve(address(userVault), 100);
+
+        // stake without lockup time
+        userVault.stake(100, 0);
+
         vm.expectRevert(StakeManager.StakeManager__NoPendingMigration.selector);
         userVault.acceptMigration();
-        vm.prank(testUser);
+
         vm.expectRevert(StakeManager.StakeManager__NoPendingMigration.selector);
         userVault.leave();
+        vm.stopPrank();
     }
 }
 
@@ -219,10 +211,17 @@ contract MigrateTest is StakeManagerTest {
     }
 
     function test_RevertWhen_NoPendingMigration() public {
+        deal(stakeToken, testUser, 1000);
         StakeVault userVault = _createTestVault(testUser);
-        vm.prank(testUser);
+
+        vm.startPrank(testUser);
+        ERC20(stakeToken).approve(address(userVault), 100);
+        // stake without lockup time
+        userVault.stake(100, 0);
+
         vm.expectRevert(StakeManager.StakeManager__NoPendingMigration.selector);
         userVault.acceptMigration();
+        vm.stopPrank();
     }
 }
 
@@ -274,17 +273,17 @@ contract UserFlowsTest is StakeManagerTest {
 
         assertEq(ERC20(stakeToken).balanceOf(address(userVault)), 100);
         assertEq(ERC20(stakeToken).balanceOf(address(user2Vault)), 100);
-        assertEq(stakeManager.stakeSupply(), 200);
+        assertEq(stakeManager.totalSupplyBalance(), 200);
 
         vm.startPrank(testUser);
         userVault.unstake(100);
         assertEq(ERC20(stakeToken).balanceOf(address(userVault)), 0);
-        assertEq(stakeManager.stakeSupply(), 100);
+        assertEq(stakeManager.totalSupplyBalance(), 100);
 
         vm.startPrank(testUser2);
         user2Vault.unstake(100);
         assertEq(ERC20(stakeToken).balanceOf(address(user2Vault)), 0);
-        assertEq(stakeManager.stakeSupply(), 0);
+        assertEq(stakeManager.totalSupplyBalance(), 0);
     }
 
     function test_StakeWithLockUpTimeLocksStake() public {
@@ -309,6 +308,6 @@ contract UserFlowsTest is StakeManagerTest {
 
         userVault.unstake(100);
         assertEq(ERC20(stakeToken).balanceOf(address(userVault)), 0);
-        assertEq(stakeManager.stakeSupply(), 0);
+        assertEq(stakeManager.totalSupplyBalance(), 0);
     }
 }
