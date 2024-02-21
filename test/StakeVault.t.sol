@@ -28,7 +28,7 @@ contract StakeVaultTest is Test {
 
     function setUp() public virtual {
         Deploy deployment = new Deploy();
-        (vaultFactory, stakeManager, deploymentConfig) = deployment.run();
+        (vaultFactory, stakeManager,, deploymentConfig) = deployment.run();
         (deployer, stakeToken) = deploymentConfig.activeNetworkConfig();
 
         vm.prank(testUser);

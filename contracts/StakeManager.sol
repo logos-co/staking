@@ -16,6 +16,7 @@ contract StakeManager is Ownable {
     error StakeManager__InvalidLimitEpoch();
     error StakeManager__InvalidLockupPeriod();
     error StakeManager__AccountNotInitialized();
+    error StakeManager__InvalidMigration();
 
     struct Account {
         address rewardAddress;
@@ -39,6 +40,7 @@ contract StakeManager is Ownable {
     uint256 public constant MAX_LOCKUP_PERIOD = 4 * YEAR; // 4 years
     uint256 public constant MP_APY = 1;
     uint256 public constant MAX_BOOST = 4;
+    uint256 public constant PRECISION = 1000000;
 
     mapping(address index => Account value) public accounts;
     mapping(uint256 index => Epoch value) public epochs;
@@ -223,6 +225,9 @@ contract StakeManager is Ownable {
      * @param _migration new StakeManager
      */
     function startMigration(StakeManager _migration) external onlyOwner noMigration processEpoch {
+        if (_migration == this || address(_migration) == address(0)) {
+            revert StakeManager__InvalidMigration();
+        }
         migration = _migration;
         stakedToken.transfer(address(migration), epochReward());
         migration.migrationInitialize(currentEpoch, totalSupplyMP, totalSupplyBalance, epochs[currentEpoch].startTime);
@@ -320,19 +325,19 @@ contract StakeManager is Ownable {
             //mint multiplier points to that epoch
             _mintMP(account, iEpoch.startTime + EPOCH_SIZE, iEpoch);
             uint256 userSupply = account.balance + account.currentMP;
-            uint256 userShare = (userSupply / iEpoch.totalSupply) * 100;
-            uint256 userEpochReward = (userShare * iEpoch.epochReward) / 100;
+            uint256 userShare = (userSupply / iEpoch.totalSupply) * PRECISION;
+            uint256 userEpochReward = (userShare * iEpoch.epochReward) / PRECISION;
             userReward += userEpochReward;
-            iEpoch.epochReward -= userEpochReward;
-            iEpoch.totalSupply -= userSupply;
+            //iEpoch.epochReward -= userEpochReward;
+            //iEpoch.totalSupply -= userSupply;
         }
         account.epoch = userEpoch;
         if (userReward > 0) {
             pendingReward -= userReward;
             stakedToken.transfer(account.rewardAddress, userReward);
         }
-        mpDifference = account.currentMP - mpDifference;
         if (address(migration) != address(0)) {
+            mpDifference = account.currentMP - mpDifference;
             migration.increaseMPFromMigration(mpDifference);
         } else if (userEpoch == currentEpoch) {
             _mintMP(account, block.timestamp, epochs[currentEpoch]);
@@ -384,7 +389,6 @@ contract StakeManager is Ownable {
             account.initialMP,
             account.currentMP
         );
-
         //update storage
         account.lastMint = processTime;
         account.currentMP += increasedMP;
@@ -428,7 +432,7 @@ contract StakeManager is Ownable {
      */
 
     function _getIncreasedMP(uint256 _balance, uint256 _deltaTime) private pure returns (uint256 _increasedMP) {
-        return _balance * ((MP_APY / YEAR) * _deltaTime);
+        return (_balance * (((_deltaTime * PRECISION) / YEAR) * MP_APY)) / PRECISION;
     }
 
     /**
@@ -453,5 +457,9 @@ contract StakeManager is Ownable {
      */
     function epochEnd() public view returns (uint256 _epochEnd) {
         return epochs[currentEpoch].startTime + EPOCH_SIZE;
+    }
+
+    function getAccount(address index) public view returns (Account memory value) {
+        return accounts[index];
     }
 }

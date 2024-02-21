@@ -16,6 +16,8 @@ contract VaultFactoryTest is Test {
 
     VaultFactory internal vaultFactory;
 
+    StakeManager internal migrationStakeManager;
+
     address internal deployer;
 
     address internal stakedToken;
@@ -24,7 +26,7 @@ contract VaultFactoryTest is Test {
 
     function setUp() public virtual {
         Deploy deployment = new Deploy();
-        (vaultFactory, stakeManager, deploymentConfig) = deployment.run();
+        (vaultFactory, stakeManager, migrationStakeManager, deploymentConfig) = deployment.run();
         (deployer, stakedToken) = deploymentConfig.activeNetworkConfig();
     }
 

@@ -7,15 +7,16 @@ import { StakeManager } from "../contracts/StakeManager.sol";
 import { VaultFactory } from "../contracts/VaultFactory.sol";
 
 contract Deploy is BaseScript {
-    function run() public returns (VaultFactory, StakeManager, DeploymentConfig) {
+    function run() public returns (VaultFactory, StakeManager, StakeManager, DeploymentConfig) {
         DeploymentConfig deploymentConfig = new DeploymentConfig(broadcaster);
         (, address token) = deploymentConfig.activeNetworkConfig();
 
         vm.startBroadcast(broadcaster);
         StakeManager stakeManager = new StakeManager(token, address(0));
         VaultFactory vaultFactory = new VaultFactory(address(stakeManager));
+        StakeManager migrationStakeManager = new StakeManager(token, address(stakeManager));
         vm.stopBroadcast();
 
-        return (vaultFactory, stakeManager, deploymentConfig);
+        return (vaultFactory, stakeManager, migrationStakeManager, deploymentConfig);
     }
 }
