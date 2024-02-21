@@ -285,11 +285,10 @@ contract ExecuteAccountTest is StakeManagerTest {
         vm.startPrank(testUser);
         ERC20(stakeToken).approve(address(userVault), stakeAmount);
         userVault.stake(stakeAmount, 0);
-        
-        vm.warp(stakeManager.epochEnd()-1);
+
+        vm.warp(stakeManager.epochEnd() - 1);
         stakeManager.executeAccount(address(userVault), stakeManager.currentEpoch());
 
-        
         for (uint256 i = 0; i < 54; i++) {
             vm.warp(stakeManager.epochEnd());
             stakeManager.executeAccount(address(userVault), stakeManager.currentEpoch());

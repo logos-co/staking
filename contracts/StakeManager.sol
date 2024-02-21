@@ -40,7 +40,7 @@ contract StakeManager is Ownable {
     uint256 public constant MAX_LOCKUP_PERIOD = 4 * YEAR; // 4 years
     uint256 public constant MP_APY = 1;
     uint256 public constant MAX_BOOST = 4;
-    uint256 public constant PRECISION = 1000000;
+    uint256 public constant PRECISION = 1_000_000;
 
     mapping(address index => Account value) public accounts;
     mapping(uint256 index => Epoch value) public epochs;
