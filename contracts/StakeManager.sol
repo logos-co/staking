@@ -424,15 +424,15 @@ contract StakeManager is Ownable {
             return _increasedMP; //just return tested value
         }
     }
+
     /**
      * @notice Calculates increased multiplier points for given balance and time
      * @param _balance balance of account
      * @param _deltaTime time difference
      * @return _increasedMP increased multiplier points
      */
-
     function _getIncreasedMP(uint256 _balance, uint256 _deltaTime) private pure returns (uint256 _increasedMP) {
-        return _balance * ((MP_APY / YEAR) * _deltaTime);
+        return _balance * ((_deltaTime / YEAR) * MP_APY);
     }
 
     /**
