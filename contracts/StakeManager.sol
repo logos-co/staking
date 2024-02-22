@@ -36,7 +36,7 @@ contract StakeManager is Ownable {
 
     uint256 public constant EPOCH_SIZE = 1 weeks;
     uint256 public constant YEAR = 365 days;
-    uint256 public constant MIN_LOCKUP_PERIOD = 2 weeks; 
+    uint256 public constant MIN_LOCKUP_PERIOD = 2 weeks;
     uint256 public constant MAX_LOCKUP_PERIOD = 4 * YEAR; // 4 years
     uint256 public constant MP_APY = 1;
     uint256 public constant MAX_BOOST = 4;
