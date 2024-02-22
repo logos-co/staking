@@ -16,6 +16,7 @@ contract StakeManager is Ownable {
     error StakeManager__InvalidLimitEpoch();
     error StakeManager__InvalidLockupPeriod();
     error StakeManager__AccountNotInitialized();
+    error StakeManager__InvalidMigration();
 
     struct Account {
         address rewardAddress;
@@ -223,6 +224,9 @@ contract StakeManager is Ownable {
      * @param _migration new StakeManager
      */
     function startMigration(StakeManager _migration) external onlyOwner noMigration processEpoch {
+        if (_migration == this || address(_migration) == address(0)) {
+            revert StakeManager__InvalidMigration();
+        }
         migration = _migration;
         stakedToken.transfer(address(migration), epochReward());
         migration.migrationInitialize(currentEpoch, totalSupplyMP, totalSupplyBalance, epochs[currentEpoch].startTime);
