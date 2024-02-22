@@ -62,6 +62,13 @@ contract StakeManager is Ownable {
         _;
     }
 
+    modifier onlyInitialized(address account) {
+        if (accounts[account].lockUntil == 0) {
+            revert StakeManager__AccountNotInitialized();
+        }
+        _;
+    }
+
     /**
      * @notice Only callable when migration is not initialized.
      */
@@ -126,7 +133,14 @@ contract StakeManager is Ownable {
             revert StakeManager__InvalidLockupPeriod();
         }
         Account storage account = accounts[msg.sender];
-        _processAccount(account, currentEpoch);
+        if (account.lockUntil == 0) {
+            // account not initialized
+            account.lockUntil = block.timestamp;
+            account.epoch = currentEpoch + 1; //starts next epoch
+            account.rewardAddress = StakeVault(msg.sender).owner();
+        } else {
+            _processAccount(account, currentEpoch);
+        }
         _mintIntialMP(account, _time, _amount);
         //update storage
         totalSupplyBalance += _amount;
@@ -137,7 +151,7 @@ contract StakeManager is Ownable {
     /**
      * leaves the staking pool and withdraws all funds;
      */
-    function unstake(uint256 _amount) external onlyVault noMigration processEpoch {
+    function unstake(uint256 _amount) external onlyVault onlyInitialized(msg.sender) noMigration processEpoch {
         Account storage account = accounts[msg.sender];
         if (_amount > account.balance) {
             revert("StakeManager: Amount exceeds balance");
@@ -165,7 +179,7 @@ contract StakeManager is Ownable {
      * @dev Reverts when `_time` is bigger than `MAX_LOCKUP_PERIOD`
      * @dev Reverts when `_time + block.timestamp` is smaller than current lock time.
      */
-    function lock(uint256 _time) external onlyVault noMigration processEpoch {
+    function lock(uint256 _time) external onlyVault onlyInitialized(msg.sender) noMigration processEpoch {
         if (_time > MAX_LOCKUP_PERIOD) {
             revert StakeManager__InvalidLockupPeriod();
         }
@@ -192,7 +206,7 @@ contract StakeManager is Ownable {
      * @param _vault Referred account
      * @param _limitEpoch Until what epoch it should be executed
      */
-    function executeAccount(address _vault, uint256 _limitEpoch) external processEpoch {
+    function executeAccount(address _vault, uint256 _limitEpoch) external onlyInitialized(_vault) processEpoch {
         _processAccount(accounts[_vault], _limitEpoch);
     }
 
@@ -251,6 +265,7 @@ contract StakeManager is Ownable {
     function migrateTo(bool _acceptMigration)
         external
         onlyVault
+        onlyInitialized(msg.sender)
         onlyMigration
         processEpoch
         returns (StakeManager newManager)
