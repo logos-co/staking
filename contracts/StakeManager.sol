@@ -162,8 +162,8 @@ contract StakeManager is Ownable {
         }
         _processAccount(account, currentEpoch);
 
-        uint256 reducedMP = (_amount * account.currentMP) / account.balance;
-        uint256 reducedInitialMP = (_amount * account.initialMP) / account.balance;
+        uint256 reducedMP = ((_amount * account.currentMP) / account.balance); //TODO: fix precision loss
+        uint256 reducedInitialMP = ((_amount * account.initialMP) / account.balance); //TODO: fix precision loss
 
         //update storage
         account.balance -= _amount;
@@ -324,8 +324,8 @@ contract StakeManager is Ownable {
             //mint multiplier points to that epoch
             _mintMP(account, iEpoch.startTime + EPOCH_SIZE, iEpoch);
             uint256 userSupply = account.balance + account.currentMP;
-            uint256 userShare = (userSupply / iEpoch.totalSupply) * 100;
-            uint256 userEpochReward = (userShare * iEpoch.epochReward) / 100;
+            uint256 userShare = userSupply / iEpoch.totalSupply; //TODO: fix precision loss;
+            uint256 userEpochReward = userShare * iEpoch.epochReward;
             userReward += userEpochReward;
             iEpoch.epochReward -= userEpochReward;
             iEpoch.totalSupply -= userSupply;
@@ -432,7 +432,7 @@ contract StakeManager is Ownable {
      * @return _increasedMP increased multiplier points
      */
     function _getIncreasedMP(uint256 _balance, uint256 _deltaTime) private pure returns (uint256 _increasedMP) {
-        return _balance * ((_deltaTime / YEAR) * MP_APY);
+        return _balance * ((_deltaTime / YEAR) * MP_APY); //TODO: fix precision loss
     }
 
     /**
