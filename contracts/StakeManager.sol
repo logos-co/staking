@@ -4,6 +4,8 @@ pragma solidity ^0.8.18;
 
 import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
+import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
+
 import { StakeVault } from "./StakeVault.sol";
 
 contract StakeManager is Ownable {
@@ -162,8 +164,8 @@ contract StakeManager is Ownable {
         }
         _processAccount(account, currentEpoch);
 
-        uint256 reducedMP = ((_amount * account.currentMP) / account.balance); //TODO: fix precision loss
-        uint256 reducedInitialMP = ((_amount * account.initialMP) / account.balance); //TODO: fix precision loss
+        uint256 reducedMP = Math.mulDiv(_amount, account.currentMP, account.balance);
+        uint256 reducedInitialMP = Math.mulDiv(_amount, account.initialMP, account.balance);
 
         //update storage
         account.balance -= _amount;
@@ -324,8 +326,8 @@ contract StakeManager is Ownable {
             //mint multiplier points to that epoch
             _mintMP(account, iEpoch.startTime + EPOCH_SIZE, iEpoch);
             uint256 userSupply = account.balance + account.currentMP;
-            uint256 userShare = userSupply / iEpoch.totalSupply; //TODO: fix precision loss;
-            uint256 userEpochReward = userShare * iEpoch.epochReward;
+            uint256 userEpochReward = Math.mulDiv(userSupply, iEpoch.epochReward, iEpoch.totalSupply);
+
             userReward += userEpochReward;
             iEpoch.epochReward -= userEpochReward;
             iEpoch.totalSupply -= userSupply;
@@ -432,7 +434,7 @@ contract StakeManager is Ownable {
      * @return _increasedMP increased multiplier points
      */
     function _getIncreasedMP(uint256 _balance, uint256 _deltaTime) private pure returns (uint256 _increasedMP) {
-        return _balance * ((_deltaTime / YEAR) * MP_APY); //TODO: fix precision loss
+        return Math.mulDiv(_balance, _deltaTime, YEAR) * MP_APY;
     }
 
     /**
