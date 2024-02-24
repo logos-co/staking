@@ -40,7 +40,7 @@ contract StakeManager is Ownable {
     uint256 public constant MAX_LOCKUP_PERIOD = 4 * YEAR; // 4 years
     uint256 public constant MP_APY = 1;
     uint256 public constant MAX_BOOST = 4;
-
+    uint256 public constant PRECISION = 1000;
     mapping(address index => Account value) public accounts;
     mapping(uint256 index => Epoch value) public epochs;
     mapping(bytes32 codehash => bool approved) public isVault;
@@ -162,8 +162,10 @@ contract StakeManager is Ownable {
         }
         _processAccount(account, currentEpoch);
 
-        uint256 reducedMP = ((_amount * account.currentMP) / account.balance); //TODO: fix precision loss
-        uint256 reducedInitialMP = ((_amount * account.initialMP) / account.balance); //TODO: fix precision loss
+        uint256 reducedMP = ((_amount * account.currentMP * PRECISION) / account.balance) / PRECISION; //TODO: fix
+            // precision loss
+        uint256 reducedInitialMP = ((_amount * account.initialMP * PRECISION) / account.balance) / PRECISION; //TODO:
+            // fix precision loss
 
         //update storage
         account.balance -= _amount;
@@ -324,8 +326,8 @@ contract StakeManager is Ownable {
             //mint multiplier points to that epoch
             _mintMP(account, iEpoch.startTime + EPOCH_SIZE, iEpoch);
             uint256 userSupply = account.balance + account.currentMP;
-            uint256 userShare = userSupply / iEpoch.totalSupply; //TODO: fix precision loss;
-            uint256 userEpochReward = userShare * iEpoch.epochReward;
+            uint256 userShare = (userSupply * PRECISION) / iEpoch.totalSupply; //TODO: fix precision loss;
+            uint256 userEpochReward = (userShare * iEpoch.epochReward) / PRECISION;
             userReward += userEpochReward;
             iEpoch.epochReward -= userEpochReward;
             iEpoch.totalSupply -= userSupply;
@@ -432,7 +434,7 @@ contract StakeManager is Ownable {
      * @return _increasedMP increased multiplier points
      */
     function _getIncreasedMP(uint256 _balance, uint256 _deltaTime) private pure returns (uint256 _increasedMP) {
-        return _balance * ((_deltaTime / YEAR) * MP_APY); //TODO: fix precision loss
+        return (_balance * ((_deltaTime * PRECISION / YEAR) * MP_APY)) / PRECISION; //TODO: fix precision loss
     }
 
     /**
