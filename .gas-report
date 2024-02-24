@@ -1,7 +1,7 @@
 | contracts/StakeManager.sol:StakeManager contract |                 |        |        |        |         |
 |--------------------------------------------------|-----------------|--------|--------|--------|---------|
 | Deployment Cost                                  | Deployment Size |        |        |        |         |
-| 2012229                                          | 10266           |        |        |        |         |
+| 2011229                                          | 10261           |        |        |        |         |
 | Function Name                                    | min             | avg    | median | max    | # calls |
 | MAX_LOCKUP_PERIOD                                | 405             | 405    | 405    | 405    | 2       |
 | MIN_LOCKUP_PERIOD                                | 264             | 264    | 264    | 264    | 3       |
@@ -15,12 +15,12 @@
 | owner                                            | 2341            | 2341   | 2341   | 2341   | 8       |
 | pendingReward                                    | 2386            | 2386   | 2386   | 2386   | 8       |
 | setVault                                         | 22606           | 22606  | 22606  | 22606  | 10      |
-| stake                                            | 2638            | 142484 | 208380 | 209064 | 13      |
+| stake                                            | 2638            | 128658 | 188409 | 189093 | 13      |
 | stakedToken                                      | 260             | 260    | 260    | 260    | 22      |
 | totalSupply                                      | 561             | 561    | 561    | 561    | 8       |
 | totalSupplyBalance                               | 362             | 1592   | 2362   | 2362   | 13      |
 | totalSupplyMP                                    | 384             | 1984   | 2384   | 2384   | 10      |
-| unstake                                          | 1730            | 13754  | 5176   | 83235  | 8       |
+| unstake                                          | 1730            | 18924  | 8964   | 107445 | 8       |
 
 
 | contracts/StakeVault.sol:StakeVault contract |                 |        |        |        |         |
@@ -31,9 +31,9 @@
 | acceptMigration                              | 1726            | 1726   | 1726   | 1726   | 2       |
 | leave                                        | 1712            | 1712   | 1712   | 1712   | 1       |
 | owner                                        | 362             | 362    | 362    | 362    | 10      |
-| stake                                        | 3433            | 170519 | 239155 | 239839 | 13      |
+| stake                                        | 3433            | 156693 | 219184 | 219868 | 13      |
 | stakedToken                                  | 212             | 212    | 212    | 212    | 2       |
-| unstake                                      | 2588            | 18674  | 9497   | 87556  | 7       |
+| unstake                                      | 2588            | 24583  | 14285  | 111766 | 7       |
 
 
 | contracts/VaultFactory.sol:VaultFactory contract |                 |        |        |        |         |
@@ -60,9 +60,9 @@
 | script/Deploy.s.sol:Deploy contract |                 |         |         |         |         |
 |-------------------------------------|-----------------|---------|---------|---------|---------|
 | Deployment Cost                     | Deployment Size |         |         |         |         |
-| 5096726                             | 26763           |         |         |         |         |
+| 5095726                             | 26758           |         |         |         |         |
 | Function Name                       | min             | avg     | median  | max     | # calls |
-| run                                 | 4791797         | 4791797 | 4791797 | 4791797 | 30      |
+| run                                 | 4790797         | 4790797 | 4790797 | 4790797 | 30      |
 
 
 | script/DeploymentConfig.s.sol:DeploymentConfig contract |                 |     |        |     |         |
@@ -86,9 +86,9 @@
 | test/script/DeployBroken.s.sol:DeployBroken contract |                 |         |         |         |         |
 |------------------------------------------------------|-----------------|---------|---------|---------|---------|
 | Deployment Cost                                      | Deployment Size |         |         |         |         |
-| 3869460                                              | 20561           |         |         |         |         |
+| 3868460                                              | 20556           |         |         |         |         |
 | Function Name                                        | min             | avg     | median  | max     | # calls |
-| run                                                  | 3631620         | 3631620 | 3631620 | 3631620 | 1       |
+| run                                                  | 3630620         | 3630620 | 3630620 | 3630620 | 1       |
 
 
 
