@@ -137,7 +137,7 @@ contract StakeManager is Ownable {
         if (account.lockUntil == 0) {
             // account not initialized
             account.lockUntil = block.timestamp;
-            account.epoch = currentEpoch + 1; //starts next epoch
+            account.epoch = currentEpoch; //starts in current epoch
             account.rewardAddress = StakeVault(msg.sender).owner();
         } else {
             _processAccount(account, currentEpoch);
