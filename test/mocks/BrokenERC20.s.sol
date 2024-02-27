@@ -9,12 +9,12 @@ contract BrokenERC20 is ERC20 {
     }
 
     // solhint-disable-next-line no-unused-vars
-    function transferFrom(address sender, address recipient, uint256 amount) public override returns (bool) {
+    function transferFrom(address, address, uint256) public pure override returns (bool) {
         return false;
     }
 
     // solhint-disable-next-line no-unused-vars
-    function transfer(address recipient, uint256 amount) public override returns (bool) {
+    function transfer(address, uint256) public pure override returns (bool) {
         return false;
     }
 }
