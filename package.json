@@ -1,11 +1,12 @@
 {
   "name": "@logos-co/staking",
   "description": "SNT staking contracts",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "author": {},
   "devDependencies": {
     "prettier": "^3.0.0",
-    "solhint-community": "^3.6.0"
+    "solhint-community": "^3.6.0",
+    "commit-and-tag-version": "^12.2.0"
   },
   "keywords": [
     "blockchain",
@@ -27,6 +28,7 @@
     "gas-report": "forge test --gas-report 2>&1 | (tee /dev/tty | awk '/Test result:/ {found=1; buffer=\"\"; next} found && !/Ran/ {buffer=buffer $0 ORS} /Ran/ {found=0} END {printf \"%s\", buffer}' > .gas-report)",
     "verify:stake_vault": "certoraRun certora/confs/StakeVault.conf",
     "verify:stake_manager": "certoraRun certora/confs/StakeManager.conf",
-    "verify:stake_manager_start_migration": "certoraRun certora/confs/StakeManagerStartMigration.conf"
+    "verify:stake_manager_start_migration": "certoraRun certora/confs/StakeManagerStartMigration.conf",
+    "release": "commit-and-tag-version"
   }
 }
