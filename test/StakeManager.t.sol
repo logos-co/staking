@@ -5,6 +5,7 @@ import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
 import { Test, console } from "forge-std/Test.sol";
 import { Deploy } from "../script/Deploy.s.sol";
+import { DeployMigrationStakeManager } from "../script/DeployMigrationStakeManager.s.sol";
 import { DeploymentConfig } from "../script/DeploymentConfig.s.sol";
 import { StakeManager } from "../contracts/StakeManager.sol";
 import { StakeVault } from "../contracts/StakeVault.sol";
@@ -428,5 +429,26 @@ contract UserFlowsTest is StakeManagerTest {
         userVault.unstake(100);
         assertEq(ERC20(stakeToken).balanceOf(address(userVault)), 0);
         assertEq(stakeManager.totalSupplyBalance(), 0);
+    }
+}
+
+contract DeployMigrationStakeManagerTest is StakeManagerTest {
+    StakeManager internal newStakeManager;
+
+    function setUp() public virtual override {
+        super.setUp();
+        DeployMigrationStakeManager deployment = new DeployMigrationStakeManager(address(stakeManager), stakeToken);
+        newStakeManager = deployment.run();
+    }
+
+    function testNewDeployment() public {
+        assertEq(newStakeManager.owner(), deployer);
+        assertEq(newStakeManager.currentEpoch(), 0);
+        assertEq(newStakeManager.pendingReward(), 0);
+        assertEq(newStakeManager.totalSupplyMP(), 0);
+        assertEq(newStakeManager.totalSupplyBalance(), 0);
+        assertEq(address(newStakeManager.stakedToken()), stakeToken);
+        assertEq(address(newStakeManager.oldManager()), address(stakeManager));
+        assertEq(newStakeManager.totalSupply(), 0);
     }
 }
