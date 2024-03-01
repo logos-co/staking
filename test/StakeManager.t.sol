@@ -273,6 +273,33 @@ contract MigrateTest is StakeManagerTest {
     }
 }
 
+contract MigrationInitializeTest is StakeManagerTest {
+    function setUp() public override {
+        StakeManagerTest.setUp();
+    }
+
+    function test_RevertWhen_MigrationPending() public {
+        // first, create 2nd and 3rd generation stake manager
+        vm.startPrank(deployer);
+        StakeManager secondStakeManager = new StakeManager(stakeToken, address(stakeManager));
+        StakeManager thirdStakeManager = new StakeManager(stakeToken, address(secondStakeManager));
+
+        // first, ensure `secondStakeManager` is in migration mode itself
+        secondStakeManager.startMigration(thirdStakeManager);
+        vm.stopPrank();
+
+        uint256 currentEpoch = stakeManager.currentEpoch();
+        uint256 totalMP = stakeManager.totalSupplyMP();
+        uint256 totalBalance = stakeManager.totalSupplyBalance();
+
+        // `stakeManager` calling `migrationInitialize` while the new stake manager is
+        // in migration itself, should revert
+        vm.prank(address(stakeManager));
+        vm.expectRevert(StakeManager.StakeManager__PendingMigration.selector);
+        secondStakeManager.migrationInitialize(currentEpoch, totalMP, totalBalance, 0);
+    }
+}
+
 contract ExecuteAccountTest is StakeManagerTest {
     StakeVault[] private userVaults;
 
