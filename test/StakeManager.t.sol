@@ -75,7 +75,7 @@ contract StakeManagerTest is Test {
         deal(stakeToken, owner, mintAmount);
         userVault = _createTestVault(owner);
         vm.startPrank(owner);
-        ERC20(stakeToken).approve(address(userVault), amount);
+        ERC20(stakeToken).approve(address(userVault), mintAmount);
         userVault.stake(amount, lockTime);
         vm.stopPrank();
     }
@@ -124,13 +124,110 @@ contract StakeTest is StakeManagerTest {
         assertEq(currentMP, 0, "userMP burned after unstaking");
     }
 
-    function test_updateLockUpTime() public { }
+    function test_restakeJustStake() public {
+        uint256 stakeAmount = 100;
+        uint256 stakeAmount2 = 50;
+        uint256 mintAmount = stakeAmount * 10;
+        StakeVault userVault = _createStakingAccount(testUser, stakeAmount, 0, mintAmount);
+        StakeVault userVault2 =
+            _createStakingAccount(testUser2, stakeAmount, stakeManager.MIN_LOCKUP_PERIOD(), mintAmount);
 
-    function test_mintBonusMP() public { }
+        vm.prank(testUser);
+        userVault.stake(stakeAmount2, 0);
+        vm.prank(testUser2);
+        userVault2.stake(stakeAmount2, 0);
 
-    function test_updateBonusMP() public { }
+        (, uint256 balance,, uint256 currentMP,,,) = stakeManager.accounts(address(userVault));
+        assertEq(balance, stakeAmount + stakeAmount2, "account balance");
+        assertEq(currentMP, stakeAmount + stakeAmount2, "account MP");
+        (, balance,, currentMP,,,) = stakeManager.accounts(address(userVault2));
+        assertEq(balance, stakeAmount + stakeAmount2, "account 2 balance");
+        assertGt(currentMP, stakeAmount + stakeAmount2, "account 2 MP");
 
-    function test_updateTotalSupplies() public { }
+        vm.warp(stakeManager.epochEnd());
+
+        vm.prank(testUser);
+        userVault.stake(stakeAmount2, 0);
+        vm.prank(testUser2);
+        userVault2.stake(stakeAmount2, 0);
+
+        (, balance,, currentMP,,,) = stakeManager.accounts(address(userVault));
+        assertEq(balance, stakeAmount + stakeAmount2 + stakeAmount2, "account balance 2");
+        assertGt(currentMP, stakeAmount + stakeAmount2 + stakeAmount2, "account MP 2");
+        (, balance,, currentMP,,,) = stakeManager.accounts(address(userVault2));
+        assertEq(balance, stakeAmount + stakeAmount2 + stakeAmount2, "account 2 balance 2");
+        assertGt(currentMP, stakeAmount + stakeAmount2 + stakeAmount2, "account 2 MP 2");
+    }
+
+    function test_restakeJustLock() public {
+        uint256 lockToIncrease = stakeManager.MIN_LOCKUP_PERIOD();
+        uint256 stakeAmount = 100;
+        uint256 stakeAmount2 = 50;
+        uint256 mintAmount = stakeAmount * 10;
+        StakeVault userVault = _createStakingAccount(testUser, stakeAmount, 0, mintAmount);
+        StakeVault userVault2 = _createStakingAccount(testUser2, stakeAmount, lockToIncrease, mintAmount);
+        vm.prank(testUser);
+        userVault.stake(0, lockToIncrease);
+        vm.prank(testUser2);
+        userVault2.stake(0, lockToIncrease);
+
+        (, uint256 balance,, uint256 currentMP,,,) = stakeManager.accounts(address(userVault));
+        assertEq(balance, stakeAmount, "account balance");
+        assertGt(currentMP, stakeAmount, "account MP");
+        (, balance,, currentMP,,,) = stakeManager.accounts(address(userVault2));
+        assertEq(balance, stakeAmount, "account 2 balance");
+        assertGt(currentMP, stakeAmount, "account 2 MP");
+
+        vm.warp(stakeManager.epochEnd());
+
+        vm.prank(testUser);
+        userVault.stake(0, lockToIncrease);
+        vm.prank(testUser2);
+        userVault2.stake(0, lockToIncrease);
+
+        (, balance,, currentMP,,,) = stakeManager.accounts(address(userVault));
+        assertEq(balance, stakeAmount, "account balance 2");
+        assertGt(currentMP, stakeAmount, "account MP 2");
+        (, balance,, currentMP,,,) = stakeManager.accounts(address(userVault2));
+        assertEq(balance, stakeAmount, "account 2 balance 2");
+        assertGt(currentMP, stakeAmount, "account 2 MP 2");
+    }
+
+    function test_restakeStakeAndLock() public {
+        uint256 lockToIncrease = stakeManager.MIN_LOCKUP_PERIOD();
+        uint256 stakeAmount = 100;
+        uint256 stakeAmount2 = 50;
+        uint256 mintAmount = stakeAmount * 10;
+        StakeVault userVault = _createStakingAccount(testUser, stakeAmount, 0, mintAmount);
+        StakeVault userVault2 = _createStakingAccount(testUser2, stakeAmount, lockToIncrease, mintAmount);
+
+        vm.prank(testUser);
+        userVault.stake(stakeAmount2, lockToIncrease);
+        vm.prank(testUser2);
+        userVault2.stake(stakeAmount2, lockToIncrease);
+
+        (, uint256 balance,, uint256 currentMP,,,) = stakeManager.accounts(address(userVault));
+        assertEq(balance, stakeAmount + stakeAmount2, "account balance");
+        assertGt(currentMP, stakeAmount + stakeAmount2, "account MP");
+        (, balance,, currentMP,,,) = stakeManager.accounts(address(userVault2));
+        assertEq(balance, stakeAmount + stakeAmount2, "account 2 balance");
+        assertGt(currentMP, stakeAmount + stakeAmount2, "account 2 MP");
+
+        vm.warp(stakeManager.epochEnd());
+
+        vm.prank(testUser);
+        userVault.stake(stakeAmount2, lockToIncrease);
+        vm.prank(testUser2);
+        userVault2.stake(stakeAmount2, lockToIncrease);
+
+        (, balance,, currentMP,,,) = stakeManager.accounts(address(userVault));
+        assertEq(balance, stakeAmount + stakeAmount2 + stakeAmount2, "account balance 2");
+        assertGt(currentMP, stakeAmount + stakeAmount2 + stakeAmount2, "account MP 2");
+        (, balance,, currentMP,,,) = stakeManager.accounts(address(userVault2));
+        assertEq(balance, stakeAmount + stakeAmount2 + stakeAmount2, "account 2 balance 2");
+        assertGt(currentMP, stakeAmount + stakeAmount2 + stakeAmount2, "account 2 MP 2");
+    }
+
 }
 
 contract UnstakeTest is StakeManagerTest {
