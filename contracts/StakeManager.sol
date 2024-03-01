@@ -251,6 +251,9 @@ contract StakeManager is Ownable {
         external
         onlyOldManager
     {
+        if (address(migration) != address(0)) {
+            revert StakeManager__PendingMigration();
+        }
         currentEpoch = _currentEpoch;
         totalSupplyMP = _totalSupplyMP;
         totalSupplyBalance = _totalSupplyBalance;
