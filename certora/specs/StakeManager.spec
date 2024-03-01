@@ -1,26 +1,26 @@
 using ERC20A as staked;
 methods {
   function staked.balanceOf(address) external returns (uint256) envfree;
-  function stakeSupply() external returns (uint256) envfree;
-  function multiplierSupply() external returns (uint256) envfree;
+  function totalSupplyBalance() external returns (uint256) envfree;
+  function totalSupplyMP() external returns (uint256) envfree;
   function oldManager() external returns (address) envfree;
   function _.migrateFrom(address, bool, StakeManager.Account) external => NONDET;
   function _.increaseMPFromMigration(uint256) external => NONDET;
   function _.migrationInitialize(uint256,uint256,uint256,uint256) external => NONDET;
 
-  function accounts(address) external returns(uint256, uint256, uint256, uint256, uint256, address) envfree;
+  function accounts(address) external returns(address, uint256, uint256, uint256, uint256, uint256, uint256) envfree;
 }
 
 function getAccountMultiplierPoints(address addr) returns uint256 {
   uint256 multiplierPoints;
-  _, _, multiplierPoints, _, _, _ = accounts(addr);
+  _, _, _, multiplierPoints, _, _, _ = accounts(addr);
 
   return multiplierPoints;
 }
 
 function getAccountBalance(address addr) returns uint256 {
   uint256 balance;
-  _, balance, _, _, _, _ = accounts(addr);
+  _, balance, _, _, _, _, _ = accounts(addr);
 
   return balance;
 }
@@ -59,17 +59,17 @@ hook Sstore accounts[KEY address addr].balance uint256 newValue (uint256 oldValu
     sumOfBalances = sumOfBalances - oldValue + newValue;
 }
 
-hook Sstore accounts[KEY address addr].multiplier uint256 newValue (uint256 oldValue) STORAGE {
+hook Sstore accounts[KEY address addr].currentMP uint256 newValue (uint256 oldValue) STORAGE {
     sumOfMultipliers = sumOfMultipliers - oldValue + newValue;
 }
 
 invariant sumOfBalancesIsStakeSupply()
-      sumOfBalances == to_mathint(stakeSupply());
+      sumOfBalances == to_mathint(totalSupplyBalance());
 
 invariant sumOfMultipliersIsMultiplierSupply()
-      sumOfMultipliers == to_mathint(multiplierSupply())
-      { preserved with (env e) {
-          simplification(e);
+      sumOfMultipliers == to_mathint(totalSupplyMP())
+      { preserved with () {
+          simplification();
         }
       }
 
