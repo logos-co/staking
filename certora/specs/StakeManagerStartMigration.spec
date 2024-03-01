@@ -3,27 +3,26 @@ using StakeManagerNew as newStakeManager;
 
 methods {
   function staked.balanceOf(address) external returns (uint256) envfree;
-  function stakeSupply() external returns (uint256) envfree;
-  function multiplierSupply() external returns (uint256) envfree;
+  function totalSupplyBalance() external returns (uint256) envfree;
+  function totalSupplyMP() external returns (uint256) envfree;
   function oldManager() external returns (address) envfree;
-  function accounts(address) external returns(uint256, uint256, uint256, uint256, uint256, address) envfree;
+  function accounts(address) external returns(address, uint256, uint256, uint256, uint256, uint256, uint256) envfree;
 
   function _.migrationInitialize(uint256,uint256,uint256,uint256) external => DISPATCHER(true);
-  function StakeManagerNew.stakeSupply() external returns (uint256) envfree;
-  //function _.stakeSupply() external => DISPATCHER(true);
+  function StakeManagerNew.totalSupplyBalance() external returns (uint256) envfree;
 }
 
 
 function getAccountMultiplierPoints(address addr) returns uint256 {
   uint256 multiplierPoints;
-  _, _, multiplierPoints, _, _, _ = accounts(addr);
+  _, _, _, multiplierPoints, _, _, _ = accounts(addr);
 
   return multiplierPoints;
 }
 
 function getAccountBalance(address addr) returns uint256 {
   uint256 balance;
-  _, balance, _, _, _, _ = accounts(addr);
+  _, balance, _, _, _, _, _ = accounts(addr);
 
   return balance;
 }
@@ -101,7 +100,7 @@ rule startMigrationCorrect {
   startMigration(e, newContract);
 
   assert currentContract.migration == newContract;
-  assert newStakeManager.stakeSupply() == currentContract.stakeSupply();
+  assert newStakeManager.totalSupplyBalance() == currentContract.totalSupplyBalance();
 }
 
 rule migrationLockedIn {
