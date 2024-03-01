@@ -41,7 +41,7 @@ definition blockedWhenNotMigrating(method f) returns bool = (
       );
 
 rule rejectWhenMigrating(method f) filtered {
-  f -> blockedWhenMigrating(f)
+  f -> blockedWhenMigrating(f) && f.contract == currentContract
 } {
   calldataarg args;
   env e;
@@ -68,7 +68,7 @@ rule allowWhenMigrating(method f) filtered {
 
 
 rule rejectWhenNotMigrating(method f) filtered {
-  f -> blockedWhenNotMigrating(f)
+  f -> blockedWhenNotMigrating(f) && f.contract == currentContract
 } {
   calldataarg args;
   env e;
@@ -103,8 +103,9 @@ rule startMigrationCorrect {
   assert newStakeManager.totalSupplyBalance() == currentContract.totalSupplyBalance();
 }
 
-rule migrationLockedIn {
-  method f;
+rule migrationLockedIn(method f) filtered {
+  f -> !blockedWhenMigrating(f) && f.contract == currentContract
+} {
   env e;
   calldataarg args;
 
