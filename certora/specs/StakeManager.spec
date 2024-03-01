@@ -107,19 +107,6 @@ rule revertsWhenNoMigration(method f) {
   assert isMigrationfunction(f) => reverted;
 }
 
-// This rule is commented out as it's just a helper rule to easily see which
-// functions change the balance of the `StakeManager` contract.
-//
-// rule whoChangeERC20Balance(  method f ) filtered { f -> f.contract != staked }
-// {
-//   address user;
-//   uint256 before = staked.balanceOf(user);
-//   calldataarg args;
-//   env e;
-//   f(e,args);
-//   assert before == staked.balanceOf(user);
-// }
-
 rule epochOnlyIncreases {
   method f;
   env e;
