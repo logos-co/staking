@@ -606,7 +606,7 @@ contract UserFlowsTest is StakeManagerTest {
     }
 }
 
-contract DeployMigrationStakeManagerTest is StakeManagerTest {
+contract MigrationStakeManagerTest is StakeManagerTest {
     StakeManager internal newStakeManager;
 
     function setUp() public virtual override {
@@ -627,7 +627,7 @@ contract DeployMigrationStakeManagerTest is StakeManagerTest {
     }
 }
 
-contract ExecuteEpochTest is DeployMigrationStakeManagerTest {
+contract ExecuteEpochTest is MigrationStakeManagerTest {
     //currentEpoch can only increase if time stakeManager.epochEnd().
     function test_ExecuteEpochShouldNotIncreaseEpochBeforeEnd() public {
         assertEq(stakeManager.currentEpoch(), 0);
