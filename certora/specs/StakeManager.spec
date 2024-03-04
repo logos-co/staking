@@ -129,10 +129,7 @@ rule revertsWhenNoMigration(method f) {
 //   assert before == staked.balanceOf(user);
 // }
 
-rule epochOnlyIncreases(method f) filtered {
-  f -> f.selector != sig:migrationInitialize(uint256,uint256,uint256,uint256).selector;
-} {
-  method f;
+rule epochOnlyIncreases(method f) {
   env e;
   calldataarg args;
 
