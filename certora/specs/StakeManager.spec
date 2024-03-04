@@ -33,8 +33,10 @@ function isMigrationfunction(method f) returns bool {
 
 /*  assume that migration is zero, causing the verification to take into account only
  cases where it is zero. specifically no externall call to the migration contract */
-function simplification() {
+function simplification(env e) {
   require currentContract.migration == 0;
+  require currentContract.oldManager() == 0;
+  require e.msg.sender != 0;
 }
 
 ghost mathint sumOfEpochRewards
@@ -63,13 +65,17 @@ hook Sstore accounts[KEY address addr].currentMP uint256 newValue (uint256 oldVa
     sumOfMultipliers = sumOfMultipliers - oldValue + newValue;
 }
 
-invariant sumOfBalancesIsStakeSupply()
-      sumOfBalances == to_mathint(totalSupplyBalance());
+invariant sumOfBalancesIsTotalSupplyBalance()
+      sumOfBalances == to_mathint(totalSupplyBalance())
+      { preserved with (env e) {
+          simplification(e);
+        }
+      }
 
 invariant sumOfMultipliersIsMultiplierSupply()
       sumOfMultipliers == to_mathint(totalSupplyMP())
-      { preserved with () {
-          simplification();
+      { preserved with (env e) {
+          simplification(e);
         }
       }
 
@@ -81,7 +87,11 @@ invariant sumOfEpochRewardsIsPendingRewards()
 }
 
 invariant highEpochsAreNull(uint256 epochNumber)
-  epochNumber >= currentContract.currentEpoch => currentContract.epochs[epochNumber].epochReward == 0;
+  epochNumber >= currentContract.currentEpoch => currentContract.epochs[epochNumber].epochReward == 0
+  { preserved with (env e) {
+      simplification(e);
+    }
+  }
 
 rule reachability(method f)
 {
