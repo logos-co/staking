@@ -625,6 +625,20 @@ contract MigrationStakeManagerTest is StakeManagerTest {
         assertEq(address(newStakeManager.oldManager()), address(stakeManager));
         assertEq(newStakeManager.totalSupply(), 0);
     }
+
+    function test_ExecuteEpochShouldNotIncreaseEpochInMigration() public {
+        assertEq(stakeManager.currentEpoch(), 0);
+        assertEq(address(stakeManager.migration()), address(0));
+        vm.prank(deployer);
+
+        stakeManager.startMigration(newStakeManager);
+        assertEq(address(stakeManager.migration()), address(newStakeManager));
+
+        vm.warp(stakeManager.epochEnd());
+        vm.expectRevert(StakeManager.StakeManager__PendingMigration.selector);
+        stakeManager.executeEpoch();
+        assertEq(stakeManager.currentEpoch(), 0);
+    }
 }
 
 contract ExecuteEpochTest is MigrationStakeManagerTest {
@@ -636,22 +650,8 @@ contract ExecuteEpochTest is MigrationStakeManagerTest {
         stakeManager.executeEpoch();
         assertEq(stakeManager.currentEpoch(), 0);
     }
-
-    function test_ExecuteEpochShouldNotIncreaseEpochInMigration() public {
-        assertEq(stakeManager.currentEpoch(), 0);
-
-        assertEq(address(stakeManager.migration()), address(0));
-        vm.prank(deployer);
-        stakeManager.startMigration(newStakeManager);
-        assertEq(address(stakeManager.migration()), address(newStakeManager));
-
-        vm.warp(stakeManager.epochEnd());
-        vm.expectRevert(StakeManager.StakeManager__PendingMigration.selector);
-        stakeManager.executeEpoch();
-        assertEq(stakeManager.currentEpoch(), 0);
-    }
-
     //currentEpoch can only increase.
+
     function test_ExecuteEpochShouldIncreaseEpoch() public {
         assertEq(stakeManager.currentEpoch(), 0);
 
