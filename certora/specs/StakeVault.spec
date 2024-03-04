@@ -16,6 +16,10 @@ rule reachability(method f){
   satisfy true;
 }
 
+/*
+  The rule below is commented out as it's merely used to easily have the
+  prover find all functions that change balances.
+
 rule whoChangeERC20Balance(method f)
 {
   simplification();
@@ -26,3 +30,4 @@ rule whoChangeERC20Balance(method f)
   f(e,args);
   assert before == staked.balanceOf(user);
 }
+*/
