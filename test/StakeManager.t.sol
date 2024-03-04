@@ -68,11 +68,11 @@ contract StakeTest is StakeManagerTest {
         ERC20(stakeToken).approve(address(userVault), 100);
 
         uint256 lockTime = stakeManager.MIN_LOCKUP_PERIOD() - 1;
-        vm.expectRevert(StakeManager.StakeManager__InvalidLockupPeriod.selector);
+        vm.expectRevert(StakeManager.StakeManager__InvalidLockTime.selector);
         userVault.stake(100, lockTime);
 
         lockTime = stakeManager.MAX_LOCKUP_PERIOD() + 1;
-        vm.expectRevert(StakeManager.StakeManager__InvalidLockupPeriod.selector);
+        vm.expectRevert(StakeManager.StakeManager__InvalidLockTime.selector);
         userVault.stake(100, lockTime);
     }
 
@@ -214,7 +214,7 @@ contract LockTest is StakeManagerTest {
         ERC20(stakeToken).approve(address(userVault), 100);
 
         uint256 lockTime = stakeManager.MAX_LOCKUP_PERIOD() + 1;
-        vm.expectRevert(StakeManager.StakeManager__InvalidLockupPeriod.selector);
+        vm.expectRevert(StakeManager.StakeManager__InvalidLockTime.selector);
         userVault.stake(100, lockTime);
     }
 }
