@@ -128,14 +128,11 @@ contract StakeManager is Ownable {
     /**
      * Increases balance of msg.sender;
      * @param _amount Amount of balance to be decreased.
-     * @param _time Seconds from block.timestamp to lock balance.
+     * @param _timeToIncrease Seconds to increase in locked time. If stake is unlocked, increases from block.timestamp.
      *
-     * @dev Reverts when `_time` is not in range of [MIN_LOCKUP_PERIOD, MAX_LOCKUP_PERIOD]
+     * @dev Reverts when resulting locked time is not in range of [MIN_LOCKUP_PERIOD, MAX_LOCKUP_PERIOD]
      */
-    function stake(uint256 _amount, uint256 _time) external onlyVault noMigration processEpoch {
-        if (_time > 0 && (_time < MIN_LOCKUP_PERIOD || _time > MAX_LOCKUP_PERIOD)) {
-            revert StakeManager__InvalidLockTime();
-        }
+    function stake(uint256 _amount, uint256 _timeToIncrease) external onlyVault noMigration processEpoch {
         Account storage account = accounts[msg.sender];
         if (account.lockUntil == 0) {
             // account not initialized
@@ -145,11 +142,22 @@ contract StakeManager is Ownable {
         } else {
             _processAccount(account, currentEpoch);
         }
-        _mintIntialMP(account, _time, _amount);
+        uint256 deltaTime = 0;
+        if (_timeToIncrease > 0) {
+            uint256 lockUntil = account.lockUntil + _timeToIncrease;
+            if (lockUntil < block.timestamp) {
+                revert StakeManager__InvalidLockTime();
+            }
+            deltaTime = lockUntil - block.timestamp;
+            if (deltaTime < MIN_LOCKUP_PERIOD || deltaTime > MAX_LOCKUP_PERIOD) {
+                revert StakeManager__InvalidLockTime();
+            }
+        }
+        _mintIntialMP(account, deltaTime, _amount);
         //update storage
         totalSupplyBalance += _amount;
         account.balance += _amount;
-        account.lockUntil += _time;
+        account.lockUntil += _timeToIncrease;
     }
 
     /**
@@ -178,23 +186,28 @@ contract StakeManager is Ownable {
 
     /**
      * @notice Locks entire balance for more amount of time.
-     * @param _time amount of time to lock from now.
+     * @param _timeToIncrease Seconds to increase in locked time. If stake is unlocked, increases from block.timestamp.
      *
-     * @dev Reverts when `_time` is bigger than `MAX_LOCKUP_PERIOD`
-     * @dev Reverts when `_time + block.timestamp` is smaller than current lock time.
+     * @dev Reverts when resulting locked time is not in range of [MIN_LOCKUP_PERIOD, MAX_LOCKUP_PERIOD]
      */
-    function lock(uint256 _time) external onlyVault onlyInitialized(msg.sender) noMigration processEpoch {
-        if (_time > MAX_LOCKUP_PERIOD) {
-            revert StakeManager__InvalidLockTime();
-        }
+    function lock(uint256 _timeToIncrease) external onlyVault onlyInitialized(msg.sender) noMigration processEpoch {
         Account storage account = accounts[msg.sender];
         _processAccount(account, currentEpoch);
-        if (account.lockUntil + _time < block.timestamp) {
+        uint256 lockUntil = account.lockUntil;
+        uint256 deltaTime;
+        if (lockUntil < block.timestamp) {
+            lockUntil = block.timestamp + _timeToIncrease;
+            deltaTime = _timeToIncrease;
+        } else {
+            lockUntil += _timeToIncrease;
+            deltaTime = lockUntil - block.timestamp;
+        }
+        if (deltaTime < MIN_LOCKUP_PERIOD || deltaTime > MAX_LOCKUP_PERIOD) {
             revert StakeManager__InvalidLockTime();
         }
-        _mintIntialMP(account, _time, 0);
+        _mintIntialMP(account, _timeToIncrease, 0);
         //update account storage
-        account.lockUntil += _time;
+        account.lockUntil = lockUntil;
     }
 
     /**
