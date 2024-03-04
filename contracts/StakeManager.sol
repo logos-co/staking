@@ -16,7 +16,6 @@ contract StakeManager is Ownable {
     error StakeManager__PendingMigration();
     error StakeManager__SenderIsNotPreviousStakeManager();
     error StakeManager__InvalidLimitEpoch();
-    error StakeManager__InvalidLockupPeriod();
     error StakeManager__AccountNotInitialized();
     error StakeManager__InvalidMigration();
     error StakeManager__AlreadyProcessedEpochs();
@@ -135,7 +134,7 @@ contract StakeManager is Ownable {
      */
     function stake(uint256 _amount, uint256 _time) external onlyVault noMigration processEpoch {
         if (_time > 0 && (_time < MIN_LOCKUP_PERIOD || _time > MAX_LOCKUP_PERIOD)) {
-            revert StakeManager__InvalidLockupPeriod();
+            revert StakeManager__InvalidLockTime();
         }
         Account storage account = accounts[msg.sender];
         if (account.lockUntil == 0) {
@@ -186,7 +185,7 @@ contract StakeManager is Ownable {
      */
     function lock(uint256 _time) external onlyVault onlyInitialized(msg.sender) noMigration processEpoch {
         if (_time > MAX_LOCKUP_PERIOD) {
-            revert StakeManager__InvalidLockupPeriod();
+            revert StakeManager__InvalidLockTime();
         }
         Account storage account = accounts[msg.sender];
         _processAccount(account, currentEpoch);
