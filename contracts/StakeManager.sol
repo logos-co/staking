@@ -19,6 +19,7 @@ contract StakeManager is Ownable {
     error StakeManager__InvalidLockupPeriod();
     error StakeManager__AccountNotInitialized();
     error StakeManager__InvalidMigration();
+    error StakeManager__AlreadyProcessedEpochs();
 
     struct Account {
         address rewardAddress;
@@ -253,6 +254,9 @@ contract StakeManager is Ownable {
     {
         if (address(migration) != address(0)) {
             revert StakeManager__PendingMigration();
+        }
+        if (currentEpoch > 0) {
+            revert StakeManager__AlreadyProcessedEpochs();
         }
         currentEpoch = _currentEpoch;
         totalSupplyMP = _totalSupplyMP;
