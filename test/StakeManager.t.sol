@@ -317,6 +317,14 @@ contract UnstakeTest is StakeManagerTest {
         assertEq(totalSupplyMPAfter, totalSupplyMPBefore - (currentMPBefore * percentToBurn / 100));
         assertEq(ERC20(stakeToken).balanceOf(testUser), unstakeAmount);
     }
+
+    function test_RevertWhen_AmountMoreThanBalance() public {
+        uint256 stakeAmount = 100;
+        StakeVault userVault = _createStakingAccount(testUser, stakeAmount);
+        vm.startPrank(testUser);
+        vm.expectRevert(StakeManager.StakeManager__InsufficientFunds.selector);
+        userVault.unstake(stakeAmount + 1);
+    }
 }
 
 contract LockTest is StakeManagerTest {
