@@ -27,8 +27,8 @@ function getAccountBalance(address addr) returns uint256 {
 
 function isMigrationfunction(method f) returns bool {
   return
-          f.selector == sig:migrateFrom(address,bool,StakeManager.Account).selector ||
-          f.selector == sig:migrateTo(bool).selector;
+          f.selector == sig:migrateTo(bool).selector ||
+          f.selector == sig:transferNonPending().selector;
 }
 
 /*  assume that migration is zero, causing the verification to take into account only
