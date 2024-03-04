@@ -82,10 +82,6 @@ contract StakeManagerTest is Test {
 }
 
 contract StakeTest is StakeManagerTest {
-    function setUp() public override {
-        StakeManagerTest.setUp();
-    }
-
     function test_RevertWhen_SenderIsNotVault() public {
         vm.expectRevert(StakeManager.StakeManager__SenderIsNotVault.selector);
         stakeManager.stake(100, 1);
@@ -227,14 +223,9 @@ contract StakeTest is StakeManagerTest {
         assertEq(balance, stakeAmount + stakeAmount2 + stakeAmount2, "account 2 balance 2");
         assertGt(currentMP, stakeAmount + stakeAmount2 + stakeAmount2, "account 2 MP 2");
     }
-
 }
 
 contract UnstakeTest is StakeManagerTest {
-    function setUp() public override {
-        StakeManagerTest.setUp();
-    }
-
     function test_RevertWhen_SenderIsNotVault() public {
         vm.expectRevert(StakeManager.StakeManager__SenderIsNotVault.selector);
         stakeManager.unstake(1);
@@ -329,10 +320,6 @@ contract UnstakeTest is StakeManagerTest {
 }
 
 contract LockTest is StakeManagerTest {
-    function setUp() public override {
-        StakeManagerTest.setUp();
-    }
-
     function test_RevertWhen_SenderIsNotVault() public {
         vm.expectRevert(StakeManager.StakeManager__SenderIsNotVault.selector);
         stakeManager.lock(100);
@@ -354,10 +341,6 @@ contract LockTest is StakeManagerTest {
 }
 
 contract LeaveTest is StakeManagerTest {
-    function setUp() public override {
-        StakeManagerTest.setUp();
-    }
-
     function test_RevertWhen_SenderIsNotVault() public {
         vm.expectRevert(StakeManager.StakeManager__SenderIsNotVault.selector);
         stakeManager.migrateTo(false);
@@ -380,10 +363,6 @@ contract LeaveTest is StakeManagerTest {
 }
 
 contract MigrateTest is StakeManagerTest {
-    function setUp() public override {
-        StakeManagerTest.setUp();
-    }
-
     function test_RevertWhen_SenderIsNotVault() public {
         vm.expectRevert(StakeManager.StakeManager__SenderIsNotVault.selector);
         stakeManager.migrateTo(true);
@@ -433,10 +412,6 @@ contract MigrationInitializeTest is StakeManagerTest {
 
 contract ExecuteAccountTest is StakeManagerTest {
     StakeVault[] private userVaults;
-
-    function setUp() public override {
-        StakeManagerTest.setUp();
-    }
 
     function test_RevertWhen_InvalidLimitEpoch() public {
         uint256 lockTime = stakeManager.MIN_LOCKUP_PERIOD();
@@ -505,7 +480,60 @@ contract ExecuteAccountTest is StakeManagerTest {
         }
     }
 
-    function test_ShouldNotMintMoreThanCap() public { }
+    function test_ShouldNotMintMoreThanCap() public {
+        uint256 stakeAmount = 10_000_000;
+        deal(stakeToken, testUser, stakeAmount);
+
+        userVaults.push(_createStakingAccount(makeAddr("testUser"), stakeAmount, 0));
+        userVaults.push(_createStakingAccount(makeAddr("testUser2"), stakeAmount, stakeManager.MAX_LOCKUP_PERIOD()));
+        userVaults.push(_createStakingAccount(makeAddr("testUser3"), stakeAmount, stakeManager.MIN_LOCKUP_PERIOD()));
+
+        for (uint256 i = 0; i < 209; i++) {
+            deal(stakeToken, address(stakeManager), 100 ether);
+            vm.warp(stakeManager.epochEnd());
+            stakeManager.executeEpoch();
+            for (uint256 j = 0; j < userVaults.length; j++) {
+                (address rewardAddress,,, uint256 currentMPBefore, uint256 lastMintBefore,, uint256 epochBefore) =
+                    stakeManager.accounts(address(userVaults[j]));
+                uint256 rewardsBefore = ERC20(stakeToken).balanceOf(rewardAddress);
+
+                stakeManager.executeAccount(address(userVaults[j]), epochBefore + 1);
+                (,,, uint256 currentMP, uint256 lastMint,, uint256 epoch) =
+                    stakeManager.accounts(address(userVaults[j]));
+                uint256 rewards = ERC20(stakeToken).balanceOf(rewardAddress);
+                assertEq(lastMint, lastMintBefore + stakeManager.EPOCH_SIZE(), "must increaase lastMint");
+                assertEq(epoch, epochBefore + 1, "must increase epoch");
+                assertGt(currentMP, currentMPBefore, "must increase MPs");
+                assertGt(rewards, rewardsBefore, "must increase rewards");
+                lastMintBefore = lastMint;
+                epochBefore = epoch;
+                currentMPBefore = currentMP;
+            }
+        }
+
+        for (uint256 i = 0; i < 100; i++) {
+            deal(stakeToken, address(stakeManager), 100 ether);
+            vm.warp(stakeManager.epochEnd());
+            stakeManager.executeEpoch();
+            for (uint256 j = 0; j < userVaults.length; j++) {
+                (address rewardAddress,,, uint256 currentMPBefore, uint256 lastMintBefore,, uint256 epochBefore) =
+                    stakeManager.accounts(address(userVaults[j]));
+                uint256 rewardsBefore = ERC20(stakeToken).balanceOf(rewardAddress);
+
+                stakeManager.executeAccount(address(userVaults[j]), epochBefore + 1);
+                (,,, uint256 currentMP, uint256 lastMint,, uint256 epoch) =
+                    stakeManager.accounts(address(userVaults[j]));
+                uint256 rewards = ERC20(stakeToken).balanceOf(rewardAddress);
+                assertEq(lastMint, lastMintBefore + stakeManager.EPOCH_SIZE(), "must increaase lastMint");
+                assertEq(epoch, epochBefore + 1, "must increase epoch");
+                assertEq(currentMP, currentMPBefore, "must NOT increase MPs");
+                assertGt(rewards, rewardsBefore, "must increase rewards");
+                lastMintBefore = lastMint;
+                epochBefore = epoch;
+                currentMPBefore = currentMP;
+            }
+        }
+    }
 
     function internal_logAccount(address vault) internal {
         (
@@ -535,10 +563,6 @@ contract ExecuteAccountTest is StakeManagerTest {
 }
 
 contract UserFlowsTest is StakeManagerTest {
-    function setUp() public override {
-        StakeManagerTest.setUp();
-    }
-
     function test_StakedSupplyShouldIncreaseAndDecreaseAgain() public {
         uint256 lockTime = 0;
         uint256 stakeAmount = 100;
