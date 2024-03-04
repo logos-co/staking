@@ -20,6 +20,7 @@ contract StakeManager is Ownable {
     error StakeManager__AccountNotInitialized();
     error StakeManager__InvalidMigration();
     error StakeManager__AlreadyProcessedEpochs();
+    error StakeManager__InsufficientFunds();
 
     struct Account {
         address rewardAddress;
@@ -158,7 +159,7 @@ contract StakeManager is Ownable {
     function unstake(uint256 _amount) external onlyVault onlyInitialized(msg.sender) noMigration processEpoch {
         Account storage account = accounts[msg.sender];
         if (_amount > account.balance) {
-            revert("StakeManager: Amount exceeds balance");
+            revert StakeManager__InsufficientFunds();
         }
         if (account.lockUntil > block.timestamp) {
             revert StakeManager__FundsLocked();
