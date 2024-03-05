@@ -39,6 +39,17 @@ function simplification(env e) {
   require e.msg.sender != 0;
 }
 
+definition requiresPreviousManager(method f) returns bool = (
+  f.selector == sig:migrationInitialize(uint256,uint256,uint256,uint256).selector ||
+  f.selector == sig:migrateFrom(address,bool,StakeManager.Account).selector ||
+  f.selector == sig:increaseMPFromMigration(uint256).selector
+  );
+
+definition requiresNextManager(method f) returns bool = (
+  f.selector == sig:migrateTo(bool).selector ||
+  f.selector == sig:transferNonPending().selector
+  );
+
 ghost mathint sumOfEpochRewards
 {
   init_state axiom sumOfEpochRewards == 0;
@@ -66,18 +77,16 @@ hook Sstore accounts[KEY address addr].currentMP uint256 newValue (uint256 oldVa
 }
 
 invariant sumOfBalancesIsTotalSupplyBalance()
-      sumOfBalances == to_mathint(totalSupplyBalance())
-      { preserved with (env e) {
-          simplification(e);
-        }
-      }
+  sumOfBalances == to_mathint(totalSupplyBalance())
+  filtered {
+    m -> !requiresPreviousManager(m) && !requiresNextManager(m)
+  }
 
 invariant sumOfMultipliersIsMultiplierSupply()
-      sumOfMultipliers == to_mathint(totalSupplyMP())
-      { preserved with (env e) {
-          simplification(e);
-        }
-      }
+  sumOfMultipliers == to_mathint(totalSupplyMP())
+  filtered {
+    m -> !requiresPreviousManager(m) && !requiresNextManager(m)
+  }
 
 invariant sumOfEpochRewardsIsPendingRewards()
   sumOfEpochRewards == to_mathint(currentContract.pendingReward)
@@ -88,9 +97,8 @@ invariant sumOfEpochRewardsIsPendingRewards()
 
 invariant highEpochsAreNull(uint256 epochNumber)
   epochNumber >= currentContract.currentEpoch => currentContract.epochs[epochNumber].epochReward == 0
-  { preserved with (env e) {
-      simplification(e);
-    }
+  filtered {
+    m -> !requiresPreviousManager(m) && !requiresNextManager(m)
   }
 
 rule reachability(method f)
