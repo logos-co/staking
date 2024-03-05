@@ -120,6 +120,31 @@ contract StakeTest is StakeManagerTest {
         assertEq(currentMP, 0, "userMP burned after unstaking");
     }
 
+    function test_restakeOnLocked() public {
+        uint256 lockToIncrease = stakeManager.MIN_LOCKUP_PERIOD();
+        uint256 stakeAmount = 100;
+        uint256 stakeAmount2 = 200;
+        uint256 stakeAmount3 = 300;
+        uint256 mintAmount = stakeAmount * 10;
+        StakeVault userVault = _createStakingAccount(testUser, stakeAmount, lockToIncrease, mintAmount);
+
+        vm.prank(testUser);
+        userVault.stake(stakeAmount2, 0);
+
+        (, uint256 balance,, uint256 currentMP,,,) = stakeManager.accounts(address(userVault));
+        assertEq(balance, stakeAmount + stakeAmount2, "account balance");
+        assertGt(currentMP, stakeAmount + stakeAmount2, "account MP");
+
+        vm.warp(stakeManager.epochEnd());
+
+        vm.prank(testUser);
+        userVault.stake(stakeAmount3, 0);
+
+        (, balance,, currentMP,,,) = stakeManager.accounts(address(userVault));
+        assertEq(balance, stakeAmount + stakeAmount2 + stakeAmount3, "account balance 2");
+        assertGt(currentMP, stakeAmount + stakeAmount2 + stakeAmount3, "account MP 2");
+    }
+
     function test_restakeJustStake() public {
         uint256 stakeAmount = 100;
         uint256 stakeAmount2 = 50;
@@ -333,18 +358,79 @@ contract LockTest is StakeManagerTest {
         stakeManager.lock(100);
     }
 
-    function test_RevertWhen_InvalidLockupPeriod() public {
-        // ensure user has funds
-        deal(stakeToken, testUser, 1000);
-        StakeVault userVault = _createTestVault(testUser);
+    function test_NewLockupPeriod() public {
+        StakeVault userVault = _createStakingAccount(testUser, 1000);
 
+        uint256 lockTime = stakeManager.MAX_LOCKUP_PERIOD();
         vm.startPrank(testUser);
-        // ensure user vault can spend user tokens
-        ERC20(stakeToken).approve(address(userVault), 100);
+        userVault.lock(lockTime);
+
+        (, uint256 balance, uint256 initialMP, uint256 currentMP,,,) = stakeManager.accounts(address(userVault));
+
+        console.log("balance", balance);
+        console.log("initialMP", initialMP);
+        console.log("currentMP", currentMP);
+    }
+
+    function test_RevertWhen_InvalidNewLockupPeriod() public {
+        StakeVault userVault = _createStakingAccount(testUser, 1000);
 
         uint256 lockTime = stakeManager.MAX_LOCKUP_PERIOD() + 1;
+        vm.startPrank(testUser);
         vm.expectRevert(StakeManager.StakeManager__InvalidLockTime.selector);
-        userVault.stake(100, lockTime);
+        userVault.lock(lockTime);
+    }
+
+    function test_UpdateLockupPeriod() public {
+        uint256 minLockup = stakeManager.MIN_LOCKUP_PERIOD();
+        StakeVault userVault = _createStakingAccount(testUser, 1000, minLockup, 1000);
+
+        vm.warp(block.timestamp + stakeManager.MIN_LOCKUP_PERIOD() - 1);
+        stakeManager.executeAccount(address(userVault), 1);
+        (, uint256 balance, uint256 initialMP, uint256 currentMP,, uint256 lockUntil,) =
+            stakeManager.accounts(address(userVault));
+
+        vm.startPrank(testUser);
+        userVault.lock(minLockup - 1);
+        (, balance, initialMP, currentMP,, lockUntil,) = stakeManager.accounts(address(userVault));
+
+        assertEq(lockUntil, block.timestamp + minLockup);
+
+        vm.warp(block.timestamp + stakeManager.MIN_LOCKUP_PERIOD());
+        userVault.lock(minLockup);
+    }
+
+    function test_RevertWhen_InvalidUpdateLockupPeriod() public {
+        uint256 minLockup = stakeManager.MIN_LOCKUP_PERIOD();
+        StakeVault userVault = _createStakingAccount(testUser, 1000, minLockup, 1000);
+
+        vm.warp(block.timestamp + stakeManager.MIN_LOCKUP_PERIOD());
+        stakeManager.executeAccount(address(userVault), 1);
+
+        (,,,,, uint256 lockUntil,) = stakeManager.accounts(address(userVault));
+        console.log(lockUntil);
+        vm.startPrank(testUser);
+        vm.expectRevert(StakeManager.StakeManager__InvalidLockTime.selector);
+        userVault.lock(minLockup - 1);
+    }
+
+    function test_ShouldIncreaseInitialMP() public {
+        uint256 stakeAmount = 100;
+        uint256 lockTime = stakeManager.MAX_LOCKUP_PERIOD();
+        StakeVault userVault = _createStakingAccount(testUser, stakeAmount);
+        (, uint256 balance, uint256 initialMP, uint256 currentMP,,,) = stakeManager.accounts(address(userVault));
+        uint256 totalSupplyMPBefore = stakeManager.totalSupplyMP();
+
+        vm.startPrank(testUser);
+        userVault.lock(lockTime);
+
+        (, uint256 newBalance, uint256 newInitialMP, uint256 newCurrentMP,,,) =
+            stakeManager.accounts(address(userVault));
+        uint256 totalSupplyMPAfter = stakeManager.totalSupplyMP();
+        assertGt(totalSupplyMPAfter, totalSupplyMPBefore, "totalSupplyMP");
+        assertGt(newInitialMP, initialMP, "initialMP");
+        assertGt(newCurrentMP, currentMP, "currentMP");
+        assertEq(newBalance, balance, "balance");
     }
 }
 
