@@ -113,14 +113,26 @@ invariant highEpochsAreNull(uint256 epochNumber)
     m -> !requiresPreviousManager(m) && !requiresNextManager(m)
   }
 
+invariant InitialMPIsNeverSmallerThanBalance(address addr)
+  to_mathint(getAccountInitialMultiplierPoints(addr)) >= to_mathint(getAccountBalance(addr))
+  filtered {
+    f -> f.selector != sig:migrateFrom(address,bool,StakeManager.Account).selector
+  }
+
+invariant CurrentMPIsNeverSmallerThanInitialMP(address addr)
+  to_mathint(getAccountCurrentMultiplierPoints(addr)) >= to_mathint(getAccountInitialMultiplierPoints(addr))
+  filtered {
+    f -> f.selector != sig:migrateFrom(address,bool,StakeManager.Account).selector
+  }
+
 invariant MPcantBeGreaterThanMaxMP(address addr)
   to_mathint(getAccountCurrentMultiplierPoints(addr)) <= (getAccountBalance(addr) * 8) + getAccountInitialMultiplierPoints(addr)
   filtered {
     f -> f.selector != sig:migrateFrom(address,bool,StakeManager.Account).selector
   }
   { preserved {
-      require getAccountInitialMultiplierPoints(addr) >= getAccountBalance(addr);
-      require getAccountCurrentMultiplierPoints(addr) >= getAccountInitialMultiplierPoints(addr);
+      requireInvariant InitialMPIsNeverSmallerThanBalance(addr);
+      requireInvariant CurrentMPIsNeverSmallerThanInitialMP(addr);
     }
   }
 
