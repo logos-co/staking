@@ -7,15 +7,13 @@ methods {
   function _.migrateFrom(address, bool, StakeManager.Account) external => NONDET;
   function _.increaseMPFromMigration(uint256) external => NONDET;
   function _.migrationInitialize(uint256,uint256,uint256,uint256) external => NONDET;
-
   function accounts(address) external returns(address, uint256, uint256, uint256, uint256, uint256, uint256) envfree;
+  function Math.mulDiv(uint256 a, uint256 b, uint256 c) internal returns uint256 => mulDivSummary(a,b,c);
 }
 
-function getAccountMultiplierPoints(address addr) returns uint256 {
-  uint256 multiplierPoints;
-  _, _, _, multiplierPoints, _, _, _ = accounts(addr);
-
-  return multiplierPoints;
+function mulDivSummary(uint256 a, uint256 b, uint256 c) returns uint256 {
+  require c != 0;
+  return require_uint256(a*b/c);
 }
 
 function getAccountBalance(address addr) returns uint256 {
@@ -23,6 +21,20 @@ function getAccountBalance(address addr) returns uint256 {
   _, balance, _, _, _, _, _ = accounts(addr);
 
   return balance;
+}
+
+function getAccountInitialMultiplierPoints(address addr) returns uint256 {
+  uint256 initialMP;
+  _, _, initialMP, _, _, _, _ = accounts(addr);
+
+  return initialMP;
+}
+
+function getAccountCurrentMultiplierPoints(address addr) returns uint256 {
+  uint256 currentMP;
+  _, _, _, currentMP, _, _, _ = accounts(addr);
+
+  return currentMP;
 }
 
 function isMigrationfunction(method f) returns bool {
@@ -99,6 +111,17 @@ invariant highEpochsAreNull(uint256 epochNumber)
   epochNumber >= currentContract.currentEpoch => currentContract.epochs[epochNumber].epochReward == 0
   filtered {
     m -> !requiresPreviousManager(m) && !requiresNextManager(m)
+  }
+
+invariant MPcantBeGreaterThanMaxMP(address addr)
+  to_mathint(getAccountCurrentMultiplierPoints(addr)) <= (getAccountBalance(addr) * 8) + getAccountInitialMultiplierPoints(addr)
+  filtered {
+    f -> f.selector != sig:migrateFrom(address,bool,StakeManager.Account).selector
+  }
+  { preserved {
+      require getAccountInitialMultiplierPoints(addr) >= getAccountBalance(addr);
+      require getAccountCurrentMultiplierPoints(addr) >= getAccountInitialMultiplierPoints(addr);
+    }
   }
 
 rule reachability(method f)
