@@ -37,6 +37,13 @@ function getAccountCurrentMultiplierPoints(address addr) returns uint256 {
   return currentMP;
 }
 
+function getAccountLockUntil(address addr) returns uint256 {
+  uint256 lockUntil;
+  _, _, _, _, _, lockUntil, _ = accounts(addr);
+
+  return lockUntil;
+}
+
 function isMigrationfunction(method f) returns bool {
   return
           f.selector == sig:migrateTo(bool).selector ||
@@ -142,6 +149,27 @@ rule reachability(method f)
   env e;
   f(e,args);
   satisfy true;
+}
+
+rule stakingMintsMultiplierPoints1To1Ratio {
+
+  env e;
+  uint256 amount;
+  uint256 lockupTime;
+  uint256 multiplierPointsBefore;
+  uint256 multiplierPointsAfter;
+
+  requireInvariant InitialMPIsNeverSmallerThanBalance(e.msg.sender);
+  requireInvariant CurrentMPIsNeverSmallerThanInitialMP(e.msg.sender);
+
+  require getAccountLockUntil(e.msg.sender) <= e.block.timestamp;
+
+  multiplierPointsBefore = getAccountInitialMultiplierPoints(e.msg.sender);
+  stake(e, amount, lockupTime);
+  multiplierPointsAfter = getAccountInitialMultiplierPoints(e.msg.sender);
+
+  assert lockupTime == 0 => to_mathint(multiplierPointsAfter) == multiplierPointsBefore + amount;
+  assert to_mathint(multiplierPointsAfter) >= multiplierPointsBefore + amount;
 }
 
 rule stakingGreaterLockupTimeMeansGreaterMPs {
