@@ -144,6 +144,27 @@ rule reachability(method f)
   satisfy true;
 }
 
+rule stakingGreaterLockupTimeMeansGreaterMPs {
+
+  env e;
+  uint256 amount;
+  uint256 lockupTime1;
+  uint256 lockupTime2;
+  uint256 multiplierPointsAfter1;
+  uint256 multiplierPointsAfter2;
+
+  storage initalStorage = lastStorage;
+
+  stake(e, amount, lockupTime1);
+  multiplierPointsAfter1 = getAccountInitialMultiplierPoints(e.msg.sender);
+
+  stake(e, amount, lockupTime2) at initalStorage;
+  multiplierPointsAfter2 = getAccountInitialMultiplierPoints(e.msg.sender);
+
+  assert lockupTime1 >= lockupTime2 => to_mathint(multiplierPointsAfter1) >= to_mathint(multiplierPointsAfter2);
+  satisfy to_mathint(multiplierPointsAfter1) > to_mathint(multiplierPointsAfter2);
+}
+
 /**
 @title when there is no migration - some functions must revert.
 Other function should have non reverting cases
