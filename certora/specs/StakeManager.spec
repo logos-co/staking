@@ -83,15 +83,15 @@ ghost mathint sumOfBalances /* sigma account[u].balance forall u */ {
 	init_state axiom sumOfBalances == 0;
 }
 
-hook Sstore epochs[KEY uint256 epochId].epochReward uint256 newValue (uint256 oldValue) STORAGE {
+hook Sstore epochs[KEY uint256 epochId].epochReward uint256 newValue (uint256 oldValue) {
   sumOfEpochRewards = sumOfEpochRewards - oldValue + newValue;
 }
 
-hook Sstore accounts[KEY address addr].balance uint256 newValue (uint256 oldValue) STORAGE {
+hook Sstore accounts[KEY address addr].balance uint256 newValue (uint256 oldValue) {
     sumOfBalances = sumOfBalances - oldValue + newValue;
 }
 
-hook Sstore accounts[KEY address addr].currentMP uint256 newValue (uint256 oldValue) STORAGE {
+hook Sstore accounts[KEY address addr].currentMP uint256 newValue (uint256 oldValue) {
     sumOfMultipliers = sumOfMultipliers - oldValue + newValue;
 }
 
