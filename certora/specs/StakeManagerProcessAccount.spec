@@ -24,7 +24,7 @@ function getAccountLockUntil(address addr) returns uint256 {
   return lockUntil;
 }
 
-hook Sstore accounts[KEY address addr].balance uint256 newValue (uint256 oldValue) STORAGE {
+hook Sstore accounts[KEY address addr].balance uint256 newValue (uint256 oldValue) {
     balanceChangedInEpoch[addr] = accountProcessed[addr];
 }
 
