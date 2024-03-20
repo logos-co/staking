@@ -76,7 +76,14 @@ contract StakeManagerTest is Test {
         userVault = _createTestVault(owner);
         vm.startPrank(owner);
         ERC20(stakeToken).approve(address(userVault), mintAmount);
-        userVault.stake(amount, lockTime);
+
+        if (lockTime > 0) {
+            userVault.depositAndStake(amount, lockTime);
+        } else {
+            userVault.deposit(amount);
+            vm.warp(userVault.depositCooldownUntil() + 1);
+            userVault.stake(amount);
+        }
         vm.stopPrank();
     }
 }
@@ -97,11 +104,11 @@ contract StakeTest is StakeManagerTest {
 
         uint256 lockTime = stakeManager.MIN_LOCKUP_PERIOD() - 1;
         vm.expectRevert(StakeManager.StakeManager__InvalidLockTime.selector);
-        userVault.stake(100, lockTime);
+        userVault.depositAndStake(100, lockTime);
 
         lockTime = stakeManager.MAX_LOCKUP_PERIOD() + 1;
         vm.expectRevert(StakeManager.StakeManager__InvalidLockTime.selector);
-        userVault.stake(100, lockTime);
+        userVault.depositAndStake(100, lockTime);
     }
 
     function test_StakeWithoutLockUpTimeMintsMultiplierPoints() public {
@@ -129,7 +136,7 @@ contract StakeTest is StakeManagerTest {
         StakeVault userVault = _createStakingAccount(testUser, stakeAmount, lockToIncrease, mintAmount);
 
         vm.prank(testUser);
-        userVault.stake(stakeAmount2, 0);
+        userVault.depositAndStake(stakeAmount2, 0);
 
         (, uint256 balance,, uint256 currentMP,,,) = stakeManager.accounts(address(userVault));
         assertEq(balance, stakeAmount + stakeAmount2, "account balance");
@@ -138,7 +145,7 @@ contract StakeTest is StakeManagerTest {
         vm.warp(stakeManager.epochEnd());
 
         vm.prank(testUser);
-        userVault.stake(stakeAmount3, 0);
+        userVault.depositAndStake(stakeAmount3, 0);
 
         (, balance,, currentMP,,,) = stakeManager.accounts(address(userVault));
         assertEq(balance, stakeAmount + stakeAmount2 + stakeAmount3, "account balance 2");
@@ -154,9 +161,9 @@ contract StakeTest is StakeManagerTest {
             _createStakingAccount(testUser2, stakeAmount, stakeManager.MIN_LOCKUP_PERIOD(), mintAmount);
 
         vm.prank(testUser);
-        userVault.stake(stakeAmount2, 0);
+        userVault.depositAndStake(stakeAmount2, 0);
         vm.prank(testUser2);
-        userVault2.stake(stakeAmount2, 0);
+        userVault2.depositAndStake(stakeAmount2, 0);
 
         (, uint256 balance,, uint256 currentMP,,,) = stakeManager.accounts(address(userVault));
         assertEq(balance, stakeAmount + stakeAmount2, "account balance");
@@ -168,9 +175,9 @@ contract StakeTest is StakeManagerTest {
         vm.warp(stakeManager.epochEnd());
 
         vm.prank(testUser);
-        userVault.stake(stakeAmount2, 0);
+        userVault.depositAndStake(stakeAmount2, 0);
         vm.prank(testUser2);
-        userVault2.stake(stakeAmount2, 0);
+        userVault2.depositAndStake(stakeAmount2, 0);
 
         (, balance,, currentMP,,,) = stakeManager.accounts(address(userVault));
         assertEq(balance, stakeAmount + stakeAmount2 + stakeAmount2, "account balance 2");
@@ -188,9 +195,9 @@ contract StakeTest is StakeManagerTest {
         StakeVault userVault = _createStakingAccount(testUser, stakeAmount, 0, mintAmount);
         StakeVault userVault2 = _createStakingAccount(testUser2, stakeAmount, lockToIncrease, mintAmount);
         vm.prank(testUser);
-        userVault.stake(0, lockToIncrease);
+        userVault.depositAndStake(0, lockToIncrease);
         vm.prank(testUser2);
-        userVault2.stake(0, lockToIncrease);
+        userVault2.depositAndStake(0, lockToIncrease);
 
         (, uint256 balance,, uint256 currentMP,,,) = stakeManager.accounts(address(userVault));
         assertEq(balance, stakeAmount, "account balance");
@@ -202,9 +209,9 @@ contract StakeTest is StakeManagerTest {
         vm.warp(stakeManager.epochEnd());
 
         vm.prank(testUser);
-        userVault.stake(0, lockToIncrease);
+        userVault.depositAndStake(0, lockToIncrease);
         vm.prank(testUser2);
-        userVault2.stake(0, lockToIncrease);
+        userVault2.depositAndStake(0, lockToIncrease);
 
         (, balance,, currentMP,,,) = stakeManager.accounts(address(userVault));
         assertEq(balance, stakeAmount, "account balance 2");
@@ -223,9 +230,9 @@ contract StakeTest is StakeManagerTest {
         StakeVault userVault2 = _createStakingAccount(testUser2, stakeAmount, lockToIncrease, mintAmount);
 
         vm.prank(testUser);
-        userVault.stake(stakeAmount2, lockToIncrease);
+        userVault.depositAndStake(stakeAmount2, lockToIncrease);
         vm.prank(testUser2);
-        userVault2.stake(stakeAmount2, lockToIncrease);
+        userVault2.depositAndStake(stakeAmount2, lockToIncrease);
 
         (, uint256 balance,, uint256 currentMP,,,) = stakeManager.accounts(address(userVault));
         assertEq(balance, stakeAmount + stakeAmount2, "account balance");
@@ -237,9 +244,9 @@ contract StakeTest is StakeManagerTest {
         vm.warp(stakeManager.epochEnd());
 
         vm.prank(testUser);
-        userVault.stake(stakeAmount2, lockToIncrease);
+        userVault.depositAndStake(stakeAmount2, lockToIncrease);
         vm.prank(testUser2);
-        userVault2.stake(stakeAmount2, lockToIncrease);
+        userVault2.depositAndStake(stakeAmount2, lockToIncrease);
 
         (, balance,, currentMP,,,) = stakeManager.accounts(address(userVault));
         assertEq(balance, stakeAmount + stakeAmount2 + stakeAmount2, "account balance 2");

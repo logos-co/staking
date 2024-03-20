@@ -12,17 +12,47 @@ import { StakeManager } from "./StakeManager.sol";
  * @notice Secures user stake
  */
 contract StakeVault is Ownable {
+
     error StakeVault__MigrationNotAvailable();
 
-    error StakeVault__StakingFailed();
+    error StakeVault__DepositCoolingDown();
 
-    error StakeVault__UnstakingFailed();
+    error StakeVault__DepositFailed();
+
+    error StakeVault__WithdrawFailed();
+
+    error StakeVault__InsufficientFunds();
+
+    error StakeVault__InvalidLockTime();
 
     StakeManager private stakeManager;
 
     ERC20 public immutable STAKED_TOKEN;
 
+    uint256 public balance;
+
+    uint256 public depositCooldownUntil;
+
+    event Deposit(uint256 indexed amount);
+
+    event Withdraw(uint256 indexed amount);
+
     event Staked(address from, address to, uint256 _amount, uint256 time);
+
+    modifier whenNotDepositCoolingDown() {
+        if (block.timestamp <= depositCooldownUntil) {
+            revert StakeVault__DepositCoolingDown();
+        }
+        _;
+    }
+
+    modifier onlySufficientBalance(uint256 _amount) {
+        uint256 availableFunds = _unstakedBalance();
+        if (_amount > availableFunds) {
+            revert StakeVault__InsufficientFunds();
+        }
+        _;
+    }
 
     constructor(address _owner, ERC20 _stakedToken, StakeManager _stakeManager) {
         _transferOwnership(_owner);
@@ -30,14 +60,33 @@ contract StakeVault is Ownable {
         stakeManager = _stakeManager;
     }
 
-    function stake(uint256 _amount, uint256 _time) external onlyOwner {
-        bool success = STAKED_TOKEN.transferFrom(msg.sender, address(this), _amount);
-        if (!success) {
-            revert StakeVault__StakingFailed();
-        }
-        stakeManager.stake(_amount, _time);
+    function deposit(uint256 _amount) external onlyOwner whenNotDepositCoolingDown {
+        depositCooldownUntil = block.timestamp + stakeManager.DEPOSIT_COOLDOWN_PERIOD();
+        _deposit(msg.sender, _amount);
+    }
 
-        emit Staked(msg.sender, address(this), _amount, _time);
+    function withdraw(uint256 _amount) public onlyOwner onlySufficientBalance(_amount) {
+        balance -= _amount;
+        bool success = STAKED_TOKEN.transfer(msg.sender, _amount);
+        if (!success) {
+            revert StakeVault__WithdrawFailed();
+        }
+        emit Withdraw(_amount);
+    }
+
+    function stake(uint256 _amount) public onlyOwner whenNotDepositCoolingDown onlySufficientBalance(_amount) {
+        _stake(_amount, 0);
+    }
+
+    function depositAndStake(uint256 _amount, uint256 _time) external onlyOwner whenNotDepositCoolingDown {
+        uint256 stakedBalance = _stakedBalance();
+        if (stakedBalance == 0 && _time == 0) {
+            // we expect `depositAndStake` to be called either with a lock time,
+            // or when there's already funds staked (because it's possible to top up stake without locking)
+            revert StakeVault__InvalidLockTime();
+        }
+        _deposit(msg.sender, _amount);
+        _stake(_amount, _time);
     }
 
     function lock(uint256 _time) external onlyOwner {
@@ -46,10 +95,11 @@ contract StakeVault is Ownable {
 
     function unstake(uint256 _amount) external onlyOwner {
         stakeManager.unstake(_amount);
-        bool success = STAKED_TOKEN.transfer(msg.sender, _amount);
-        if (!success) {
-            revert StakeVault__UnstakingFailed();
-        }
+    }
+
+    function unstakeAndWithdraw(uint256 _amount) external onlyOwner {
+        stakeManager.unstake(_amount);
+        withdraw(_amount);
     }
 
     function leave() external onlyOwner {
@@ -68,5 +118,29 @@ contract StakeVault is Ownable {
 
     function stakedToken() external view returns (ERC20) {
         return STAKED_TOKEN;
+    }
+
+    function _deposit(address _from, uint256 _amount) internal {
+        balance += _amount;
+        bool success = STAKED_TOKEN.transferFrom(_from, address(this), _amount);
+        if (!success) {
+            revert StakeVault__DepositFailed();
+        }
+        emit Deposit( _amount);
+    }
+
+    function _stake(uint256 _amount, uint256 _time) internal {
+        stakeManager.stake(_amount, _time);
+        emit Staked(msg.sender, address(this), _amount, _time);
+    }
+
+    function _unstakedBalance() internal view returns (uint256) {
+        (, uint256 stakedBalance, ,,,,) = stakeManager.accounts(address(this));
+        return balance - stakedBalance;
+    }
+
+    function _stakedBalance() internal view returns (uint256) {
+        (, uint256 stakedBalance, ,,,,) = stakeManager.accounts(address(this));
+        return stakedBalance;
     }
 }
