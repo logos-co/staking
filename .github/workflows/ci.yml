@@ -159,10 +159,17 @@ jobs:
         run: "pnpm install"
 
       - name: Verify rules
-        run: "pnpm verify"
+        run: |
+          pnpm ${{matrix.rule}}
         env:
           CERTORAKEY: ${{ secrets.CERTORAKEY }}
 
     strategy:
       fail-fast: false
       max-parallel: 16
+      matrix:
+        rule:
+          - verify:stake_vault
+          - verify:stake_manager
+          - verify:stake_manager_process
+          - verify:stake_manager_start_migration
