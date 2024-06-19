@@ -7,7 +7,7 @@ methods {
   function ERC20A.totalSupply() external returns(uint256) envfree;
   function StakeManager.accounts(address) external returns(address, uint256, uint256, uint256, uint256, uint256, uint256) envfree;
   function _.migrateFrom(address, bool, StakeManager.Account) external => DISPATCHER(true);
-  function _.increaseMPFromMigration(uint256) external => DISPATCHER(true);
+  function _.increaseTotalMP(uint256) external => DISPATCHER(true);
   function _.owner() external => DISPATCHER(true);
   function Math.mulDiv(uint256 a, uint256 b, uint256 c) internal returns uint256 => mulDivSummary(a,b,c);
 }
@@ -27,7 +27,7 @@ function getAccountBalance(address addr) returns uint256 {
 definition isMigrationFunction(method f) returns bool = (
   f.selector == sig:stakeManager.migrationInitialize(uint256,uint256,uint256,uint256).selector ||
   f.selector == sig:stakeManager.migrateFrom(address,bool,StakeManager.Account).selector ||
-  f.selector == sig:stakeManager.increaseMPFromMigration(uint256).selector ||
+  f.selector == sig:stakeManager.increaseTotalMP(uint256).selector ||
   f.selector == sig:stakeManager.startMigration(address).selector
   );
 

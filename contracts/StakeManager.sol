@@ -53,7 +53,7 @@ contract StakeManager is Ownable {
     uint256 public totalSupplyMP;
     uint256 public totalSupplyBalance;
     StakeManager public migration;
-    StakeManager public immutable oldManager;
+    StakeManager public immutable previousManager;
     ERC20 public immutable stakedToken;
 
     /**
@@ -66,7 +66,7 @@ contract StakeManager is Ownable {
         _;
     }
 
-    modifier onlyInitialized(address account) {
+    modifier onlyAccountInitialized(address account) {
         if (accounts[account].lockUntil == 0) {
             revert StakeManager__AccountNotInitialized();
         }
@@ -76,7 +76,7 @@ contract StakeManager is Ownable {
     /**
      * @notice Only callable when migration is not initialized.
      */
-    modifier noMigration() {
+    modifier noPendingMigration() {
         if (address(migration) != address(0)) {
             revert StakeManager__PendingMigration();
         }
@@ -86,7 +86,7 @@ contract StakeManager is Ownable {
     /**
      * @notice Only callable when migration is initialized.
      */
-    modifier onlyMigration() {
+    modifier onlyPendingMigration() {
         if (address(migration) == address(0)) {
             revert StakeManager__NoPendingMigration();
         }
@@ -96,8 +96,8 @@ contract StakeManager is Ownable {
     /**
      * @notice Only callable from old manager.
      */
-    modifier onlyOldManager() {
-        if (msg.sender != address(oldManager)) {
+    modifier onlyPreviousManager() {
+        if (msg.sender != address(previousManager)) {
             revert StakeManager__SenderIsNotPreviousStakeManager();
         }
         _;
@@ -106,7 +106,7 @@ contract StakeManager is Ownable {
     /**
      * @notice Process epoch if it has ended
      */
-    modifier processEpoch() {
+    modifier finalizeEpoch() {
         if (block.timestamp >= epochEnd() && address(migration) == address(0)) {
             //finalize current epoch
             epochs[currentEpoch].epochReward = epochReward();
@@ -119,9 +119,9 @@ contract StakeManager is Ownable {
         _;
     }
 
-    constructor(address _stakedToken, address _oldManager) {
+    constructor(address _stakedToken, address _previousManager) {
         epochs[0].startTime = block.timestamp;
-        oldManager = StakeManager(_oldManager);
+        previousManager = StakeManager(_previousManager);
         stakedToken = ERC20(_stakedToken);
     }
 
@@ -132,8 +132,9 @@ contract StakeManager is Ownable {
      *
      * @dev Reverts when resulting locked time is not in range of [MIN_LOCKUP_PERIOD, MAX_LOCKUP_PERIOD]
      */
-    function stake(uint256 _amount, uint256 _timeToIncrease) external onlyVault noMigration processEpoch {
+    function stake(uint256 _amount, uint256 _timeToIncrease) external onlyVault noPendingMigration finalizeEpoch {
         Account storage account = accounts[msg.sender];
+
         if (account.lockUntil == 0) {
             // account not initialized
             account.lockUntil = block.timestamp;
@@ -142,18 +143,22 @@ contract StakeManager is Ownable {
         } else {
             _processAccount(account, currentEpoch);
         }
+
         uint256 deltaTime = 0;
+
         if (_timeToIncrease > 0) {
             uint256 lockUntil = account.lockUntil + _timeToIncrease;
             if (lockUntil < block.timestamp) {
                 revert StakeManager__InvalidLockTime();
             }
+
             deltaTime = lockUntil - block.timestamp;
             if (deltaTime < MIN_LOCKUP_PERIOD || deltaTime > MAX_LOCKUP_PERIOD) {
                 revert StakeManager__InvalidLockTime();
             }
         }
-        _mintIntialMP(account, deltaTime, _amount);
+        _mintInitialMP(account, deltaTime, _amount);
+
         //update storage
         totalSupplyBalance += _amount;
         account.balance += _amount;
@@ -163,7 +168,13 @@ contract StakeManager is Ownable {
     /**
      * leaves the staking pool and withdraws all funds;
      */
-    function unstake(uint256 _amount) external onlyVault onlyInitialized(msg.sender) noMigration processEpoch {
+    function unstake(uint256 _amount)
+        external
+        onlyVault
+        onlyAccountInitialized(msg.sender)
+        noPendingMigration
+        finalizeEpoch
+    {
         Account storage account = accounts[msg.sender];
         if (_amount > account.balance) {
             revert StakeManager__InsufficientFunds();
@@ -190,7 +201,13 @@ contract StakeManager is Ownable {
      *
      * @dev Reverts when resulting locked time is not in range of [MIN_LOCKUP_PERIOD, MAX_LOCKUP_PERIOD]
      */
-    function lock(uint256 _timeToIncrease) external onlyVault onlyInitialized(msg.sender) noMigration processEpoch {
+    function lock(uint256 _timeToIncrease)
+        external
+        onlyVault
+        onlyAccountInitialized(msg.sender)
+        noPendingMigration
+        finalizeEpoch
+    {
         Account storage account = accounts[msg.sender];
         _processAccount(account, currentEpoch);
         uint256 lockUntil = account.lockUntil;
@@ -205,17 +222,17 @@ contract StakeManager is Ownable {
         if (deltaTime < MIN_LOCKUP_PERIOD || deltaTime > MAX_LOCKUP_PERIOD) {
             revert StakeManager__InvalidLockTime();
         }
-        _mintIntialMP(account, _timeToIncrease, 0);
+        _mintInitialMP(account, _timeToIncrease, 0);
         //update account storage
         account.lockUntil = lockUntil;
     }
 
     /**
      * @notice Release rewards for current epoch and increase epoch.
-     * @dev only executes the prerequisite modifier processEpoch
+     * @dev only executes the prerequisite modifier finalizeEpoch
      */
-    function executeEpoch() external noMigration processEpoch {
-        return; //see modifier processEpoch
+    function executeEpoch() external noPendingMigration finalizeEpoch {
+        return; //see modifier finalizeEpoch
     }
 
     /**
@@ -223,7 +240,14 @@ contract StakeManager is Ownable {
      * @param _vault Referred account
      * @param _limitEpoch Until what epoch it should be executed
      */
-    function executeAccount(address _vault, uint256 _limitEpoch) external onlyInitialized(_vault) processEpoch {
+    function executeAccount(
+        address _vault,
+        uint256 _limitEpoch
+    )
+        external
+        onlyAccountInitialized(_vault)
+        finalizeEpoch
+    {
         _processAccount(accounts[_vault], _limitEpoch);
     }
 
@@ -239,7 +263,7 @@ contract StakeManager is Ownable {
      * @notice starts migration to new StakeManager
      * @param _migration new StakeManager
      */
-    function startMigration(StakeManager _migration) external onlyOwner noMigration processEpoch {
+    function startMigration(StakeManager _migration) external onlyOwner noPendingMigration finalizeEpoch {
         if (_migration == this || address(_migration) == address(0)) {
             revert StakeManager__InvalidMigration();
         }
@@ -263,7 +287,7 @@ contract StakeManager is Ownable {
         uint256 _epochStartTime
     )
         external
-        onlyOldManager
+        onlyPreviousManager
     {
         if (address(migration) != address(0)) {
             revert StakeManager__PendingMigration();
@@ -280,7 +304,7 @@ contract StakeManager is Ownable {
     /**
      * @notice Transfer current epoch funds for migrated manager
      */
-    function transferNonPending() external onlyMigration {
+    function transferNonPending() external onlyPendingMigration {
         stakedToken.transfer(address(migration), epochReward());
     }
 
@@ -291,9 +315,9 @@ contract StakeManager is Ownable {
     function migrateTo(bool _acceptMigration)
         external
         onlyVault
-        onlyInitialized(msg.sender)
-        onlyMigration
-        processEpoch
+        onlyAccountInitialized(msg.sender)
+        onlyPendingMigration
+        finalizeEpoch
         returns (StakeManager newManager)
     {
         _processAccount(accounts[msg.sender], currentEpoch);
@@ -312,7 +336,7 @@ contract StakeManager is Ownable {
      * @param _account Account data
      * @param _acceptMigration If account should be stored or its MP/balance supply reduced
      */
-    function migrateFrom(address _vault, bool _acceptMigration, Account memory _account) external onlyOldManager {
+    function migrateFrom(address _vault, bool _acceptMigration, Account memory _account) external onlyPreviousManager {
         if (_acceptMigration) {
             accounts[_vault] = _account;
         } else {
@@ -324,10 +348,10 @@ contract StakeManager is Ownable {
     /**
      * @dev Only callable from old manager.
      * @notice Increase total MP from old manager
-     * @param _increasedMP amount MP increased on account after migration initialized
+     * @param _amount amount MP increased on account after migration initialized
      */
-    function increaseMPFromMigration(uint256 _increasedMP) external onlyOldManager {
-        totalSupplyMP += _increasedMP;
+    function increaseTotalMP(uint256 _amount) external onlyPreviousManager {
+        totalSupplyMP += _amount;
     }
 
     /**
@@ -359,41 +383,38 @@ contract StakeManager is Ownable {
         }
         mpDifference = account.currentMP - mpDifference;
         if (address(migration) != address(0)) {
-            migration.increaseMPFromMigration(mpDifference);
+            migration.increaseTotalMP(mpDifference);
         } else if (userEpoch == currentEpoch) {
             _mintMP(account, block.timestamp, epochs[currentEpoch]);
         }
     }
 
     /**
-     * @notice Mint initial multiplier points for given balance and time
-     * @dev if increased balance, increases difference of increased balance for current remaining lock time
+     * @notice Mint initial multiplier points for given staking amount and time
+     * @dev if amount is greater 0, it increases difference of amount for current remaining lock time
      * @dev if increased lock time, increases difference of total new balance for increased lock time
      * @param account Account to mint multiplier points
      * @param increasedLockTime increased lock time
-     * @param increasedBalance increased balance
+     * @param amount amount to stake
      */
-    function _mintIntialMP(Account storage account, uint256 increasedLockTime, uint256 increasedBalance) private {
-        uint256 increasedMP;
-        if (increasedBalance > 0) {
-            increasedMP += increasedBalance; //initial multiplier points
+    function _mintInitialMP(Account storage account, uint256 increasedLockTime, uint256 amount) private {
+        uint256 mpToMint;
+        if (amount > 0) {
+            mpToMint += amount; //initial multiplier points
             if (block.timestamp < account.lockUntil) {
                 //increasing balance on locked account?
                 //bonus for remaining previously locked time of new balance.
-                increasedMP += _getIncreasedMP(increasedBalance, account.lockUntil - block.timestamp);
+                mpToMint += _getMPToMint(amount, account.lockUntil - block.timestamp);
             }
         }
         if (increasedLockTime > 0) {
             //bonus for increased lock time
-            increasedMP += _getIncreasedMP(account.balance + increasedBalance, increasedLockTime);
+            mpToMint += _getMPToMint(account.balance + amount, increasedLockTime);
         }
-
-        //does not check for MAX_BOOST
-
         //update storage
-        totalSupplyMP += increasedMP;
-        account.initialMP += increasedMP;
-        account.currentMP += increasedMP;
+        totalSupplyMP += mpToMint;
+        account.initialMP += mpToMint;
+        account.currentMP += mpToMint;
         account.lastMint = block.timestamp;
     }
 
@@ -404,8 +425,8 @@ contract StakeManager is Ownable {
      * @param epoch Epoch to increment total supply
      */
     function _mintMP(Account storage account, uint256 processTime, Epoch storage epoch) private {
-        uint256 increasedMP = _capMaxMPIncrease( //check for MAX_BOOST
-            _getIncreasedMP(account.balance, processTime - account.lastMint),
+        uint256 increasedMP = _getMaxMPToMint( //check for MAX_BOOST
+            _getMPToMint(account.balance, processTime - account.lastMint),
             account.balance,
             account.initialMP,
             account.currentMP
@@ -420,14 +441,14 @@ contract StakeManager is Ownable {
 
     /**
      * @notice Calculates maximum multiplier point increase for given balance
-     * @param _increasedMP tested value
+     * @param _mpToMint tested value
      * @param _balance balance of account
      * @param _currentMP current multiplier point of the account
      * @param _initialMP initial multiplier point of the account
      * @return _maxToIncrease maximum multiplier point increase
      */
-    function _capMaxMPIncrease(
-        uint256 _increasedMP,
+    function _getMaxMPToMint(
+        uint256 _mpToMint,
         uint256 _balance,
         uint256 _initialMP,
         uint256 _currentMP
@@ -437,23 +458,23 @@ contract StakeManager is Ownable {
         returns (uint256 _maxToIncrease)
     {
         // Maximum multiplier point for given balance
-        _maxToIncrease = _getIncreasedMP(_balance, MAX_BOOST * YEAR) + _initialMP;
-        if (_increasedMP + _currentMP > _maxToIncrease) {
+        _maxToIncrease = _getMPToMint(_balance, MAX_BOOST * YEAR) + _initialMP;
+        if (_mpToMint + _currentMP > _maxToIncrease) {
             //reached cap when increasing MP
             return _maxToIncrease - _currentMP; //how much left to reach cap
         } else {
             //not reached capw hen increasing MP
-            return _increasedMP; //just return tested value
+            return _mpToMint; //just return tested value
         }
     }
 
     /**
-     * @notice Calculates increased multiplier points for given balance and time
+     * @notice Calculates multiplier points to mint for given balance and time
      * @param _balance balance of account
      * @param _deltaTime time difference
-     * @return _increasedMP increased multiplier points
+     * @return multiplier points to mint
      */
-    function _getIncreasedMP(uint256 _balance, uint256 _deltaTime) private pure returns (uint256 _increasedMP) {
+    function _getMPToMint(uint256 _balance, uint256 _deltaTime) private pure returns (uint256) {
         return Math.mulDiv(_balance, _deltaTime, YEAR) * MP_APY;
     }
 
