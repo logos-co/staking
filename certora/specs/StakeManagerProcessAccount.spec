@@ -31,7 +31,7 @@ hook Sstore accounts[KEY address addr].balance uint256 newValue (uint256 oldValu
 definition requiresPreviousManager(method f) returns bool = (
   f.selector == sig:migrationInitialize(uint256,uint256,uint256,uint256).selector ||
   f.selector == sig:migrateFrom(address,bool,StakeManager.Account).selector ||
-  f.selector == sig:increaseMPFromMigration(uint256).selector
+  f.selector == sig:increaseTotalMP(uint256).selector
   );
 
 definition requiresNextManager(method f) returns bool = (

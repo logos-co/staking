@@ -34,7 +34,7 @@ contract StakeManagerTest is Test {
         assertEq(stakeManager.totalSupplyMP(), 0);
         assertEq(stakeManager.totalSupplyBalance(), 0);
         assertEq(address(stakeManager.stakedToken()), stakeToken);
-        assertEq(address(stakeManager.oldManager()), address(0));
+        assertEq(address(stakeManager.previousManager()), address(0));
         assertEq(stakeManager.totalSupply(), 0);
     }
 
@@ -183,7 +183,6 @@ contract StakeTest is StakeManagerTest {
     function test_restakeJustLock() public {
         uint256 lockToIncrease = stakeManager.MIN_LOCKUP_PERIOD();
         uint256 stakeAmount = 100;
-        uint256 stakeAmount2 = 50;
         uint256 mintAmount = stakeAmount * 10;
         StakeVault userVault = _createStakingAccount(testUser, stakeAmount, 0, mintAmount);
         StakeVault userVault2 = _createStakingAccount(testUser2, stakeAmount, lockToIncrease, mintAmount);
@@ -629,27 +628,6 @@ contract ExecuteAccountTest is StakeManagerTest {
         }
     }
 
-    function internal_logAccount(address vault) internal {
-        (
-            address rewardAddress,
-            uint256 balance,
-            uint256 initialMP,
-            uint256 currentMP,
-            uint256 lastMint,
-            uint256 lockUntil,
-            uint256 epoch
-        ) = stakeManager.accounts(vault);
-        console.log("===============");
-        console.log("rewardAddress :", rewardAddress);
-        console.log("##### balance :", balance);
-        console.log("### initialMP :", initialMP);
-        console.log("### currentMP :", currentMP);
-        console.log("#### lastMint :", lastMint);
-        console.log("### lockUntil :", lockUntil);
-        console.log("####### epoch :", epoch);
-        console.log("===============");
-    }
-
     function test_UpdateEpoch() public { }
     function test_PayRewards() public { }
 
@@ -716,7 +694,7 @@ contract MigrationStakeManagerTest is StakeManagerTest {
         assertEq(newStakeManager.totalSupplyMP(), 0);
         assertEq(newStakeManager.totalSupplyBalance(), 0);
         assertEq(address(newStakeManager.stakedToken()), stakeToken);
-        assertEq(address(newStakeManager.oldManager()), address(stakeManager));
+        assertEq(address(newStakeManager.previousManager()), address(stakeManager));
         assertEq(newStakeManager.totalSupply(), 0);
     }
 

@@ -5,7 +5,7 @@ methods {
   function staked.balanceOf(address) external returns (uint256) envfree;
   function totalSupplyBalance() external returns (uint256) envfree;
   function totalSupplyMP() external returns (uint256) envfree;
-  function oldManager() external returns (address) envfree;
+  function previousManager() external returns (address) envfree;
   function accounts(address) external returns(address, uint256, uint256, uint256, uint256, uint256, uint256) envfree;
 
   function _.migrationInitialize(uint256,uint256,uint256,uint256) external => DISPATCHER(true);
