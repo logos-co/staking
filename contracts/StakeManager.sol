@@ -222,9 +222,15 @@ contract StakeManager is Ownable {
         if (deltaTime < MIN_LOCKUP_PERIOD || deltaTime > MAX_LOCKUP_PERIOD) {
             revert StakeManager__InvalidLockTime();
         }
-        _mintInitialMP(account, _timeToIncrease, 0);
-        //update account storage
+
+        uint256 mpToMint = _getMaxMPToMint(
+            _getMPToMint(account.balance, _timeToIncrease), account.balance, account.initialMP, account.currentMP
+        );
+
+        totalSupplyMP += mpToMint;
+        account.currentMP += mpToMint;
         account.lockUntil = lockUntil;
+        account.lastMint = block.timestamp;
     }
 
     /**
@@ -433,9 +439,9 @@ contract StakeManager is Ownable {
         );
 
         //update storage
-        account.lastMint = processTime;
-        account.currentMP += increasedMP;
         totalSupplyMP += increasedMP;
+        account.currentMP += increasedMP;
+        account.lastMint = processTime;
         epoch.totalSupply += increasedMP;
     }
 

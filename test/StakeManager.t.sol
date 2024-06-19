@@ -413,23 +413,13 @@ contract LockTest is StakeManagerTest {
         userVault.lock(minLockup - 1);
     }
 
-    function test_ShouldIncreaseInitialMP() public {
-        uint256 stakeAmount = 100;
-        uint256 lockTime = stakeManager.MAX_LOCKUP_PERIOD();
-        StakeVault userVault = _createStakingAccount(testUser, stakeAmount);
-        (, uint256 balance, uint256 initialMP, uint256 currentMP,,,) = stakeManager.accounts(address(userVault));
-        uint256 totalSupplyMPBefore = stakeManager.totalSupplyMP();
-
+    function test_InitialMPDoesNotIncreaseAfterLock() public {
+        uint256 minLockup = stakeManager.MIN_LOCKUP_PERIOD();
+        StakeVault userVault = _createStakingAccount(testUser, 1000, 0, 1000);
         vm.startPrank(testUser);
-        userVault.lock(lockTime);
-
-        (, uint256 newBalance, uint256 newInitialMP, uint256 newCurrentMP,,,) =
-            stakeManager.accounts(address(userVault));
-        uint256 totalSupplyMPAfter = stakeManager.totalSupplyMP();
-        assertGt(totalSupplyMPAfter, totalSupplyMPBefore, "totalSupplyMP");
-        assertGt(newInitialMP, initialMP, "initialMP");
-        assertGt(newCurrentMP, currentMP, "currentMP");
-        assertEq(newBalance, balance, "balance");
+        userVault.lock(minLockup);
+        (, uint256 balance, uint256 initialMP,,,,) = stakeManager.accounts(address(userVault));
+        assertEq(initialMP, balance);
     }
 }
 
