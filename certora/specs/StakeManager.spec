@@ -23,18 +23,18 @@ function getAccountBalance(address addr) returns uint256 {
   return balance;
 }
 
-function getAccountInitialMultiplierPoints(address addr) returns uint256 {
-  uint256 initialMP;
-  _, _, initialMP, _, _, _, _ = accounts(addr);
+function getAccountBonusMultiplierPoints(address addr) returns uint256 {
+  uint256 bonusMP;
+  _, _, bonusMP, _, _, _, _ = accounts(addr);
 
-  return initialMP;
+  return bonusMP;
 }
 
 function getAccountCurrentMultiplierPoints(address addr) returns uint256 {
-  uint256 currentMP;
-  _, _, _, currentMP, _, _, _ = accounts(addr);
+  uint256 totalMP;
+  _, _, _, totalMP, _, _, _ = accounts(addr);
 
-  return currentMP;
+  return totalMP;
 }
 
 function getAccountLockUntil(address addr) returns uint256 {
@@ -91,7 +91,7 @@ hook Sstore accounts[KEY address addr].balance uint256 newValue (uint256 oldValu
     sumOfBalances = sumOfBalances - oldValue + newValue;
 }
 
-hook Sstore accounts[KEY address addr].currentMP uint256 newValue (uint256 oldValue) {
+hook Sstore accounts[KEY address addr].totalMP uint256 newValue (uint256 oldValue) {
     sumOfMultipliers = sumOfMultipliers - oldValue + newValue;
 }
 
@@ -121,19 +121,19 @@ invariant highEpochsAreNull(uint256 epochNumber)
   }
 
 invariant InitialMPIsNeverSmallerThanBalance(address addr)
-  to_mathint(getAccountInitialMultiplierPoints(addr)) >= to_mathint(getAccountBalance(addr))
+  to_mathint(getAccountBonusMultiplierPoints(addr)) >= to_mathint(getAccountBalance(addr))
   filtered {
     f -> f.selector != sig:migrateFrom(address,bool,StakeManager.Account).selector
   }
 
 invariant CurrentMPIsNeverSmallerThanInitialMP(address addr)
-  to_mathint(getAccountCurrentMultiplierPoints(addr)) >= to_mathint(getAccountInitialMultiplierPoints(addr))
+  to_mathint(getAccountCurrentMultiplierPoints(addr)) >= to_mathint(getAccountBonusMultiplierPoints(addr))
   filtered {
     f -> f.selector != sig:migrateFrom(address,bool,StakeManager.Account).selector
   }
 
 invariant MPcantBeGreaterThanMaxMP(address addr)
-  to_mathint(getAccountCurrentMultiplierPoints(addr)) <= (getAccountBalance(addr) * 8) + getAccountInitialMultiplierPoints(addr)
+  to_mathint(getAccountCurrentMultiplierPoints(addr)) <= (getAccountBalance(addr) * 8) + getAccountBonusMultiplierPoints(addr)
   filtered {
     f -> f.selector != sig:migrateFrom(address,bool,StakeManager.Account).selector
   }
@@ -164,9 +164,9 @@ rule stakingMintsMultiplierPoints1To1Ratio {
 
   require getAccountLockUntil(e.msg.sender) <= e.block.timestamp;
 
-  multiplierPointsBefore = getAccountInitialMultiplierPoints(e.msg.sender);
+  multiplierPointsBefore = getAccountBonusMultiplierPoints(e.msg.sender);
   stake(e, amount, lockupTime);
-  multiplierPointsAfter = getAccountInitialMultiplierPoints(e.msg.sender);
+  multiplierPointsAfter = getAccountBonusMultiplierPoints(e.msg.sender);
 
   assert lockupTime == 0 => to_mathint(multiplierPointsAfter) == multiplierPointsBefore + amount;
   assert to_mathint(multiplierPointsAfter) >= multiplierPointsBefore + amount;
@@ -184,10 +184,10 @@ rule stakingGreaterLockupTimeMeansGreaterMPs {
   storage initalStorage = lastStorage;
 
   stake(e, amount, lockupTime1);
-  multiplierPointsAfter1 = getAccountInitialMultiplierPoints(e.msg.sender);
+  multiplierPointsAfter1 = getAccountBonusMultiplierPoints(e.msg.sender);
 
   stake(e, amount, lockupTime2) at initalStorage;
-  multiplierPointsAfter2 = getAccountInitialMultiplierPoints(e.msg.sender);
+  multiplierPointsAfter2 = getAccountBonusMultiplierPoints(e.msg.sender);
 
   assert lockupTime1 >= lockupTime2 => to_mathint(multiplierPointsAfter1) >= to_mathint(multiplierPointsAfter2);
   satisfy to_mathint(multiplierPointsAfter1) > to_mathint(multiplierPointsAfter2);

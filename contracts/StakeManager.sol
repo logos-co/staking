@@ -24,8 +24,8 @@ contract StakeManager is Ownable {
     struct Account {
         address rewardAddress;
         uint256 balance;
-        uint256 initialMP;
-        uint256 currentMP;
+        uint256 bonusMP;
+        uint256 totalMP;
         uint256 lastMint;
         uint256 lockUntil;
         uint256 epoch;
@@ -157,7 +157,7 @@ contract StakeManager is Ownable {
                 revert StakeManager__InvalidLockTime();
             }
         }
-        _mintInitialMP(account, deltaTime, _amount);
+        _mintBonusMP(account, deltaTime, _amount);
 
         //update storage
         totalSupplyBalance += _amount;
@@ -184,13 +184,13 @@ contract StakeManager is Ownable {
         }
         _processAccount(account, currentEpoch);
 
-        uint256 reducedMP = Math.mulDiv(_amount, account.currentMP, account.balance);
-        uint256 reducedInitialMP = Math.mulDiv(_amount, account.initialMP, account.balance);
+        uint256 reducedMP = Math.mulDiv(_amount, account.totalMP, account.balance);
+        uint256 reducedInitialMP = Math.mulDiv(_amount, account.bonusMP, account.balance);
 
         //update storage
         account.balance -= _amount;
-        account.initialMP -= reducedInitialMP;
-        account.currentMP -= reducedMP;
+        account.bonusMP -= reducedInitialMP;
+        account.totalMP -= reducedMP;
         totalSupplyBalance -= _amount;
         totalSupplyMP -= reducedMP;
     }
@@ -222,7 +222,7 @@ contract StakeManager is Ownable {
         if (deltaTime < MIN_LOCKUP_PERIOD || deltaTime > MAX_LOCKUP_PERIOD) {
             revert StakeManager__InvalidLockTime();
         }
-        _mintInitialMP(account, _timeToIncrease, 0);
+        _mintBonusMP(account, _timeToIncrease, 0);
         //update account storage
         account.lockUntil = lockUntil;
     }
@@ -322,7 +322,7 @@ contract StakeManager is Ownable {
     {
         _processAccount(accounts[msg.sender], currentEpoch);
         Account memory account = accounts[msg.sender];
-        totalSupplyMP -= account.currentMP;
+        totalSupplyMP -= account.totalMP;
         totalSupplyBalance -= account.balance;
         delete accounts[msg.sender];
         migration.migrateFrom(msg.sender, _acceptMigration, account);
@@ -340,7 +340,7 @@ contract StakeManager is Ownable {
         if (_acceptMigration) {
             accounts[_vault] = _account;
         } else {
-            totalSupplyMP -= _account.currentMP;
+            totalSupplyMP -= _account.totalMP;
             totalSupplyBalance -= _account.balance;
         }
     }
@@ -365,11 +365,11 @@ contract StakeManager is Ownable {
         }
         uint256 userReward;
         uint256 userEpoch = account.epoch;
-        uint256 mpDifference = account.currentMP;
+        uint256 mpDifference = account.totalMP;
         for (Epoch storage iEpoch = epochs[userEpoch]; userEpoch < _limitEpoch; userEpoch++) {
             //mint multiplier points to that epoch
             _mintMP(account, iEpoch.startTime + EPOCH_SIZE, iEpoch);
-            uint256 userSupply = account.balance + account.currentMP;
+            uint256 userSupply = account.balance + account.totalMP;
             uint256 userEpochReward = Math.mulDiv(userSupply, iEpoch.epochReward, iEpoch.totalSupply);
 
             userReward += userEpochReward;
@@ -381,7 +381,7 @@ contract StakeManager is Ownable {
             pendingReward -= userReward;
             stakedToken.transfer(account.rewardAddress, userReward);
         }
-        mpDifference = account.currentMP - mpDifference;
+        mpDifference = account.totalMP - mpDifference;
         if (address(migration) != address(0)) {
             migration.increaseTotalMP(mpDifference);
         } else if (userEpoch == currentEpoch) {
@@ -390,14 +390,14 @@ contract StakeManager is Ownable {
     }
 
     /**
-     * @notice Mint initial multiplier points for given staking amount and time
+     * @notice Mint bonus multiplier points for given staking amount and time
      * @dev if amount is greater 0, it increases difference of amount for current remaining lock time
      * @dev if increased lock time, increases difference of total new balance for increased lock time
      * @param account Account to mint multiplier points
      * @param increasedLockTime increased lock time
      * @param amount amount to stake
      */
-    function _mintInitialMP(Account storage account, uint256 increasedLockTime, uint256 amount) private {
+    function _mintBonusMP(Account storage account, uint256 increasedLockTime, uint256 amount) private {
         uint256 mpToMint;
         if (amount > 0) {
             mpToMint += amount; //initial multiplier points
@@ -413,8 +413,8 @@ contract StakeManager is Ownable {
         }
         //update storage
         totalSupplyMP += mpToMint;
-        account.initialMP += mpToMint;
-        account.currentMP += mpToMint;
+        account.bonusMP += mpToMint;
+        account.totalMP += mpToMint;
         account.lastMint = block.timestamp;
     }
 
@@ -428,13 +428,13 @@ contract StakeManager is Ownable {
         uint256 increasedMP = _getMaxMPToMint( //check for MAX_BOOST
             _getMPToMint(account.balance, processTime - account.lastMint),
             account.balance,
-            account.initialMP,
-            account.currentMP
+            account.bonusMP,
+            account.totalMP
         );
 
         //update storage
         account.lastMint = processTime;
-        account.currentMP += increasedMP;
+        account.totalMP += increasedMP;
         totalSupplyMP += increasedMP;
         epoch.totalSupply += increasedMP;
     }
@@ -443,25 +443,25 @@ contract StakeManager is Ownable {
      * @notice Calculates maximum multiplier point increase for given balance
      * @param _mpToMint tested value
      * @param _balance balance of account
-     * @param _currentMP current multiplier point of the account
-     * @param _initialMP initial multiplier point of the account
+     * @param _totalMP total multiplier point of the account
+     * @param _bonusMP bonus multiplier point of the account
      * @return _maxToIncrease maximum multiplier point increase
      */
     function _getMaxMPToMint(
         uint256 _mpToMint,
         uint256 _balance,
-        uint256 _initialMP,
-        uint256 _currentMP
+        uint256 _bonusMP,
+        uint256 _totalMP
     )
         private
         pure
         returns (uint256 _maxToIncrease)
     {
         // Maximum multiplier point for given balance
-        _maxToIncrease = _getMPToMint(_balance, MAX_BOOST * YEAR) + _initialMP;
-        if (_mpToMint + _currentMP > _maxToIncrease) {
+        _maxToIncrease = _getMPToMint(_balance, MAX_BOOST * YEAR) + _bonusMP;
+        if (_mpToMint + _totalMP > _maxToIncrease) {
             //reached cap when increasing MP
-            return _maxToIncrease - _currentMP; //how much left to reach cap
+            return _maxToIncrease - _totalMP; //how much left to reach cap
         } else {
             //not reached capw hen increasing MP
             return _mpToMint; //just return tested value
