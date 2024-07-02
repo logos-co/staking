@@ -29,6 +29,7 @@ contract StakeManager is Ownable {
         uint256 lastMint;
         uint256 lockUntil;
         uint256 epoch;
+        uint256 epochReachedMaxBoost;
     }
 
     struct Epoch {
@@ -52,6 +53,10 @@ contract StakeManager is Ownable {
     uint256 public pendingReward;
     uint256 public totalSupplyMP;
     uint256 public totalSupplyBalance;
+
+    uint256 public reachedMaxBoost;
+    mapping(uint256 epochId => uint256 reachedMaxBoost) public balanceReachedMaxBoost;
+
     StakeManager public migration;
     StakeManager public immutable previousManager;
     ERC20 public immutable stakedToken;
@@ -112,6 +117,10 @@ contract StakeManager is Ownable {
             epochs[currentEpoch].epochReward = epochReward();
             epochs[currentEpoch].totalSupply = totalSupply();
             pendingReward += epochs[currentEpoch].epochReward;
+
+            //mp estimation
+            reachedMaxBoost += balanceReachedMaxBoost[currentEpoch];
+
             //create new epoch
             currentEpoch++;
             epochs[currentEpoch].startTime = block.timestamp;
@@ -159,6 +168,12 @@ contract StakeManager is Ownable {
         }
         _mintBonusMP(account, deltaTime, _amount);
 
+        //mp estimation
+        uint256 epochId = (MAX_BOOST * YEAR) / EPOCH_SIZE;
+        epochId += currentEpoch;
+        balanceReachedMaxBoost[epochId] += _amount;
+        account.epochReachedMaxBoost = epochId;
+        
         //update storage
         totalSupplyBalance += _amount;
         account.balance += _amount;
