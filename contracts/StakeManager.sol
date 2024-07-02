@@ -36,6 +36,7 @@ contract StakeManager is Ownable {
         uint256 startTime;
         uint256 epochReward;
         uint256 totalSupply;
+        uint256 balanceSupply;
     }
 
     uint256 public constant EPOCH_SIZE = 1 weeks;
@@ -118,8 +119,12 @@ contract StakeManager is Ownable {
             epochs[currentEpoch].totalSupply = totalSupply();
             pendingReward += epochs[currentEpoch].epochReward;
 
+            
+
             //mp estimation
+            epochs[currentEpoch].balanceSupply = totalSupplyBalance;
             reachedMaxBoost += balanceReachedMaxBoost[currentEpoch];
+            //estimatedMP = _getMPToMint(balanceSupply - reachedMaxBoost, epoch.elapsedTime)
 
             //create new epoch
             currentEpoch++;
@@ -133,7 +138,7 @@ contract StakeManager is Ownable {
         previousManager = StakeManager(_previousManager);
         stakedToken = ERC20(_stakedToken);
     }
-
+    uint256 public constant EPOCHS_TO_MAX = (MAX_BOOST * YEAR) / EPOCH_SIZE;
     /**
      * Increases balance of msg.sender;
      * @param _amount Amount of balance to be decreased.
@@ -169,10 +174,9 @@ contract StakeManager is Ownable {
         _mintBonusMP(account, deltaTime, _amount);
 
         //mp estimation
-        uint256 epochId = (MAX_BOOST * YEAR) / EPOCH_SIZE;
-        epochId += currentEpoch;
-        balanceReachedMaxBoost[epochId] += _amount;
-        account.epochReachedMaxBoost = epochId;
+        uint256 epochIdThatReachedMaxBoostForAnAccount = currentEpoch + EPOCHS_TO_MAX;
+        balanceReachedMaxBoost[epochIdThatReachedMaxBoostForAnAccount] += _amount;
+        account.epochReachedMaxBoost = epochIdThatReachedMaxBoostForAnAccount;
         
         //update storage
         totalSupplyBalance += _amount;
