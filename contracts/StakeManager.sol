@@ -29,14 +29,14 @@ contract StakeManager is Ownable {
         uint256 lastMint;
         uint256 lockUntil;
         uint256 epoch;
-        uint256 epochReachedMaxBoost;
+        uint256 mpMaxBoostLimitEpoch;
     }
 
     struct Epoch {
         uint256 startTime;
         uint256 epochReward;
         uint256 totalSupply;
-        uint256 balanceSupply;
+        uint256 totalSupplyBalance;
     }
 
     uint256 public constant EPOCH_SIZE = 1 weeks;
@@ -45,6 +45,7 @@ contract StakeManager is Ownable {
     uint256 public constant MAX_LOCKUP_PERIOD = 4 * YEAR; // 4 years
     uint256 public constant MP_APY = 1;
     uint256 public constant MAX_BOOST = 4;
+    uint256 public constant MAX_BOOST_LIMIT_EPOCH_COUNT = (MAX_BOOST * YEAR) / EPOCH_SIZE;
 
     mapping(address index => Account value) public accounts;
     mapping(uint256 index => Epoch value) public epochs;
@@ -54,9 +55,9 @@ contract StakeManager is Ownable {
     uint256 public pendingReward;
     uint256 public totalSupplyMP;
     uint256 public totalSupplyBalance;
+    uint256 public totalMpMaxBoostLimitBalance;
 
-    uint256 public reachedMaxBoost;
-    mapping(uint256 epochId => uint256 reachedMaxBoost) public balanceReachedMaxBoost;
+    mapping(uint256 epochId => uint256 balance) public mpMaxBoostLimitEpochBalance;
 
     StakeManager public migration;
     StakeManager public immutable previousManager;
@@ -119,12 +120,12 @@ contract StakeManager is Ownable {
             epochs[currentEpoch].totalSupply = totalSupply();
             pendingReward += epochs[currentEpoch].epochReward;
 
-            
+
 
             //mp estimation
-            epochs[currentEpoch].balanceSupply = totalSupplyBalance;
-            reachedMaxBoost += balanceReachedMaxBoost[currentEpoch];
-            //estimatedMP = _getMPToMint(balanceSupply - reachedMaxBoost, epoch.elapsedTime)
+            epochs[currentEpoch].totalSupplyBalance = totalSupplyBalance;
+            totalMpMaxBoostLimitBalance += mpMaxBoostLimitEpochBalance[currentEpoch];
+            //estimatedMP = _getMPToMint(totalSupplyBalance - totalMpMaxBoostLimitBalance, epoch.elapsedTime)
 
             //create new epoch
             currentEpoch++;
@@ -138,7 +139,7 @@ contract StakeManager is Ownable {
         previousManager = StakeManager(_previousManager);
         stakedToken = ERC20(_stakedToken);
     }
-    uint256 public constant EPOCHS_TO_MAX = (MAX_BOOST * YEAR) / EPOCH_SIZE;
+
     /**
      * Increases balance of msg.sender;
      * @param _amount Amount of balance to be decreased.
@@ -171,17 +172,18 @@ contract StakeManager is Ownable {
                 revert StakeManager__InvalidLockTime();
             }
         }
+
         _mintBonusMP(account, deltaTime, _amount);
 
         //mp estimation
-        uint256 epochIdThatReachedMaxBoostForAnAccount = currentEpoch + EPOCHS_TO_MAX;
-        balanceReachedMaxBoost[epochIdThatReachedMaxBoostForAnAccount] += _amount;
-        account.epochReachedMaxBoost = epochIdThatReachedMaxBoostForAnAccount;
-        
+        uint256 mpMaxBoostLimitEpoch = currentEpoch + MAX_BOOST_LIMIT_EPOCH_COUNT;
+
         //update storage
+        mpMaxBoostLimitEpochBalance[mpMaxBoostLimitEpoch] += _amount; // some staked amount from the past
         totalSupplyBalance += _amount;
         account.balance += _amount;
         account.lockUntil += _timeToIncrease;
+        account.mpMaxBoostLimitEpoch = mpMaxBoostLimitEpoch;
     }
 
     /**
@@ -450,7 +452,7 @@ contract StakeManager is Ownable {
      * @param epoch Epoch to increment total supply
      */
     function _mintMP(Account storage account, uint256 processTime, Epoch storage epoch) private {
-        uint256 increasedMP = _getMaxMPToMint( //check for MAX_BOOST
+        uint256 mpToMint = _getMaxMPToMint(
             _getMPToMint(account.balance, processTime - account.lastMint),
             account.balance,
             account.bonusMP,
@@ -459,9 +461,9 @@ contract StakeManager is Ownable {
 
         //update storage
         account.lastMint = processTime;
-        account.totalMP += increasedMP;
-        totalSupplyMP += increasedMP;
-        epoch.totalSupply += increasedMP;
+        account.totalMP += mpToMint;
+        totalSupplyMP += mpToMint;
+        epoch.totalSupply += mpToMint;
     }
 
     /**
@@ -470,7 +472,7 @@ contract StakeManager is Ownable {
      * @param _balance balance of account
      * @param _totalMP total multiplier point of the account
      * @param _bonusMP bonus multiplier point of the account
-     * @return _maxToIncrease maximum multiplier point increase
+     * @return _maxMpToMint maximum multiplier points to mint
      */
     function _getMaxMPToMint(
         uint256 _mpToMint,
@@ -480,13 +482,13 @@ contract StakeManager is Ownable {
     )
         private
         pure
-        returns (uint256 _maxToIncrease)
+        returns (uint256 _maxMpToMint)
     {
         // Maximum multiplier point for given balance
-        _maxToIncrease = _getMPToMint(_balance, MAX_BOOST * YEAR) + _bonusMP;
-        if (_mpToMint + _totalMP > _maxToIncrease) {
+        _maxMpToMint = _getMPToMint(_balance, MAX_BOOST * YEAR) + _bonusMP;
+        if (_mpToMint + _totalMP > _maxMpToMint) {
             //reached cap when increasing MP
-            return _maxToIncrease - _totalMP; //how much left to reach cap
+            return _maxMpToMint - _totalMP; //how much left to reach cap
         } else {
             //not reached capw hen increasing MP
             return _mpToMint; //just return tested value
