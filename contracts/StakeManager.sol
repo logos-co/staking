@@ -476,10 +476,10 @@ contract StakeManager is Ownable {
         account.totalMP += mpToMint;
         totalSupplyMP += mpToMint;
         epoch.totalSupply += mpToMint;
-        
+
         //mp estimation
         epoch.estimatedMP -= mpToMint;
-        pendingMPToBeMinted -= mpToMint
+        pendingMPToBeMinted -= mpToMint;
     }
 
     /**
