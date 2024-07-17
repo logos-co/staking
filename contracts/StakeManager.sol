@@ -36,7 +36,8 @@ contract StakeManager is Ownable {
         uint256 startTime;
         uint256 epochReward;
         uint256 totalSupply;
-        uint256 totalSupplyBalance;
+        //uint256 totalSupplyBalance;
+        uint256 estimatedMP;
     }
 
     uint256 public constant EPOCH_SIZE = 1 weeks;
@@ -53,6 +54,8 @@ contract StakeManager is Ownable {
 
     uint256 public currentEpoch;
     uint256 public pendingReward;
+
+    uint256 public pendingMPToBeMinted;
     uint256 public totalSupplyMP;
     uint256 public totalSupplyBalance;
     uint256 public totalMpMaxBoostLimitBalance;
@@ -115,17 +118,20 @@ contract StakeManager is Ownable {
      */
     modifier finalizeEpoch() {
         if (block.timestamp >= epochEnd() && address(migration) == address(0)) {
+            //mp estimation
+
+            totalMpMaxBoostLimitBalance += mpMaxBoostLimitEpochBalance[currentEpoch];
+            epochs[currentEpoch].estimatedMP = _getMPToMint(
+                totalSupplyBalance - totalMpMaxBoostLimitBalance,
+                block.timestamp - epochs[currentEpoch].startTime
+                );
+            pendingMPToBeMinted += epochs[currentEpoch].estimatedMP;
+
             //finalize current epoch
             epochs[currentEpoch].epochReward = epochReward();
             epochs[currentEpoch].totalSupply = totalSupply();
             pendingReward += epochs[currentEpoch].epochReward;
-
-
-
-            //mp estimation
-            epochs[currentEpoch].totalSupplyBalance = totalSupplyBalance;
-            totalMpMaxBoostLimitBalance += mpMaxBoostLimitEpochBalance[currentEpoch];
-            //estimatedMP = _getMPToMint(totalSupplyBalance - totalMpMaxBoostLimitBalance, epoch.elapsedTime)
+            //epochs[currentEpoch].totalSupplyBalance = totalSupplyBalance;
 
             //create new epoch
             currentEpoch++;
@@ -149,6 +155,7 @@ contract StakeManager is Ownable {
      */
     function stake(uint256 _amount, uint256 _timeToIncrease) external onlyVault noPendingMigration finalizeEpoch {
         Account storage account = accounts[msg.sender];
+        require(account.balance == 0); //cant add more stake
 
         if (account.lockUntil == 0) {
             // account not initialized
@@ -177,13 +184,14 @@ contract StakeManager is Ownable {
 
         //mp estimation
         uint256 mpMaxBoostLimitEpoch = currentEpoch + MAX_BOOST_LIMIT_EPOCH_COUNT;
-
-        //update storage
         mpMaxBoostLimitEpochBalance[mpMaxBoostLimitEpoch] += _amount; // some staked amount from the past
+        account.mpMaxBoostLimitEpoch = mpMaxBoostLimitEpoch;
+        
+        //update storage
         totalSupplyBalance += _amount;
         account.balance += _amount;
         account.lockUntil += _timeToIncrease;
-        account.mpMaxBoostLimitEpoch = mpMaxBoostLimitEpoch;
+        
     }
 
     /**
@@ -209,6 +217,12 @@ contract StakeManager is Ownable {
 
         uint256 reducedMP = Math.mulDiv(_amount, account.totalMP, account.balance);
         uint256 reducedInitialMP = Math.mulDiv(_amount, account.bonusMP, account.balance);
+
+        //mp estimation
+        mpMaxBoostLimitEpochBalance[account.mpMaxBoostLimitEpoch] -= _amount; // some staked amount from the past
+        if(account.mpMaxBoostLimitEpoch < currentEpoch) {
+            totalMpMaxBoostLimitBalance -= _amount;
+        }
 
         //update storage
         account.balance -= _amount;
@@ -412,7 +426,8 @@ contract StakeManager is Ownable {
         if (address(migration) != address(0)) {
             migration.increaseTotalMP(mpDifference);
         } else if (userEpoch == currentEpoch) {
-            _mintMP(account, block.timestamp, epochs[currentEpoch]);
+            // removed this for estimated MP work
+            //_mintMP(account, block.timestamp, epochs[currentEpoch]);
         }
     }
 
@@ -464,6 +479,10 @@ contract StakeManager is Ownable {
         account.totalMP += mpToMint;
         totalSupplyMP += mpToMint;
         epoch.totalSupply += mpToMint;
+        
+        //mp estimation
+        epoch.estimatedMP -= mpToMint;
+        pendingMPToBeMinted -= mpToMint
     }
 
     /**
@@ -506,10 +525,20 @@ contract StakeManager is Ownable {
     }
 
     /**
-     * @notice Returns total of multiplier points and balance
+     * @notice Returns total of multiplier points and balance, 
+     * and the pending MPs that would be minted if all accounts were processed
      * @return _totalSupply current total supply
      */
     function totalSupply() public view returns (uint256 _totalSupply) {
+        return totalSupplyMP + totalSupplyBalance + pendingMPToBeMinted;
+    }
+
+
+    /**
+     * @notice Returns total of multiplier points and balance
+     * @return _totalSupply current total supply
+     */
+    function totalSupplyMinted() public view returns (uint256 _totalSupply) {
         return totalSupplyMP + totalSupplyBalance;
     }
 
