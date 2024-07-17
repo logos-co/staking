@@ -20,6 +20,7 @@ contract StakeManager is Ownable {
     error StakeManager__InvalidMigration();
     error StakeManager__AlreadyProcessedEpochs();
     error StakeManager__InsufficientFunds();
+    error StakeManager__AlreadyStaked();
 
     struct Account {
         address rewardAddress;
@@ -155,7 +156,9 @@ contract StakeManager is Ownable {
      */
     function stake(uint256 _amount, uint256 _timeToIncrease) external onlyVault noPendingMigration finalizeEpoch {
         Account storage account = accounts[msg.sender];
-        require(account.balance == 0); //cant add more stake
+        if (account.balance > 0) {
+            revert StakeManager__AlreadyStaked();
+        }
 
         if (account.lockUntil == 0) {
             // account not initialized
