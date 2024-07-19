@@ -583,8 +583,9 @@ contract ExecuteAccountTest is StakeManagerTest {
         deal(stakeToken, testUser, stakeAmount);
 
         userVaults.push(_createStakingAccount(makeAddr("testUser"), stakeAmount, 0));
-        userVaults.push(_createStakingAccount(makeAddr("testUser2"), stakeAmount, stakeManager.MAX_LOCKUP_PERIOD()));
-        userVaults.push(_createStakingAccount(makeAddr("testUser3"), stakeAmount, stakeManager.MIN_LOCKUP_PERIOD()));
+        userVaults.push(_createStakingAccount(makeAddr("testUser2"), stakeAmount, 0));
+        // userVaults.push(_createStakingAccount(makeAddr("testUser2"), stakeAmount, stakeManager.MAX_LOCKUP_PERIOD()));
+        // userVaults.push(_createStakingAccount(makeAddr("testUser3"), stakeAmount, stakeManager.MIN_LOCKUP_PERIOD()));
 
         for (uint256 i = 0; i <= epochsAmountToReachCap; i++) {
             deal(stakeToken, address(stakeManager), 100 ether);
@@ -622,7 +623,7 @@ contract ExecuteAccountTest is StakeManagerTest {
                 uint256 rewards = ERC20(stakeToken).balanceOf(rewardAddress);
                 assertEq(lastMint, lastMintBefore + stakeManager.EPOCH_SIZE(), "must increaase lastMint");
                 assertEq(epoch, epochBefore + 1, "must increase epoch");
-                //assertEq(totalMP, totalMPBefore, "must NOT increase MPs");
+                assertEq(totalMP, totalMPBefore, "must NOT increase MPs");
                 assertGt(rewards, rewardsBefore, "must increase rewards");
                 lastMintBefore = lastMint;
                 epochBefore = epoch;

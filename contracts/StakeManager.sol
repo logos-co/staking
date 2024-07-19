@@ -122,8 +122,10 @@ contract StakeManager is Ownable {
         if (block.timestamp >= epochEnd() && address(migration) == address(0)) {
             //mp estimation
 
-            console.log("FINALZIING EPOCH...");
+            console.log("\n");
+            console.log("Finalizing epoch...");
             totalMpMaxBoostLimitBalance += mpMaxBoostLimitEpochBalance[currentEpoch];
+            console.log("\tEstimating MPs for epoch...");
             epochs[currentEpoch].estimatedMP = _getMPToMint(
                 totalSupplyBalance - totalMpMaxBoostLimitBalance,
                 EPOCH_SIZE
@@ -135,6 +137,9 @@ contract StakeManager is Ownable {
             epochs[currentEpoch].totalSupply = totalSupply();
             pendingReward += epochs[currentEpoch].epochReward;
             //epochs[currentEpoch].totalSupplyBalance = totalSupplyBalance;
+
+            console.log("\tcurrentEpoch.estimatedMP: ", epochs[currentEpoch].estimatedMP);
+            console.log("\tpendingMPToBeMinted: ", pendingMPToBeMinted);
 
             //create new epoch
             currentEpoch++;
@@ -220,8 +225,8 @@ contract StakeManager is Ownable {
         }
         _processAccount(account, currentEpoch);
 
-        uint256 reducedMP = Math.mulDiv(_amount, account.totalMP, account.balance);
-        uint256 reducedInitialMP = Math.mulDiv(_amount, account.bonusMP, account.balance);
+        uint256 reducedMP = Math.mulDiv(_amount, account.totalMP, account.balance, Math.Rounding.Up);
+        uint256 reducedInitialMP = Math.mulDiv(_amount, account.bonusMP, account.balance, Math.Rounding.Up);
 
         //mp estimation
         mpMaxBoostLimitEpochBalance[account.mpMaxBoostLimitEpoch] -= _amount; // some staked amount from the past
@@ -292,6 +297,7 @@ contract StakeManager is Ownable {
         onlyAccountInitialized(_vault)
         finalizeEpoch
     {
+        console.log("Processing account rewards for epochs...");
         _processAccount(accounts[_vault], _limitEpoch);
     }
 
@@ -409,18 +415,15 @@ contract StakeManager is Ownable {
         if (_limitEpoch > currentEpoch) {
             revert StakeManager__InvalidLimitEpoch();
         }
-        console.log("CALLING processAccount");
         uint256 userReward;
         uint256 userEpoch = account.epoch;
         uint256 mpDifference = account.totalMP;
         for (Epoch storage iEpoch = epochs[userEpoch]; userEpoch < _limitEpoch; userEpoch++) {
             //mint multiplier points to that epoch
-            console.log("BEFORE MINT MP:");
-            console.log("Epoch number: ", userEpoch);
+            console.log("\tProcessing account epoch: ", userEpoch);
             _mintMP(account, iEpoch.startTime + EPOCH_SIZE, iEpoch);
-            console.log("AFTER MINT MP");
             uint256 userSupply = account.balance + account.totalMP;
-            uint256 userEpochReward = Math.mulDiv(userSupply, iEpoch.epochReward, iEpoch.totalSupply);
+            uint256 userEpochReward = Math.mulDiv(userSupply, iEpoch.epochReward, iEpoch.totalSupply, Math.Rounding.Up);
 
             userReward += userEpochReward;
             iEpoch.epochReward -= userEpochReward;
@@ -489,17 +492,20 @@ contract StakeManager is Ownable {
         totalSupplyMP += mpToMint;
         epoch.totalSupply += mpToMint;
 
+        console.log("\tmpToMint: ", mpToMint);
         //mp estimation
-        console.log("mpToMint: ", mpToMint);
-        console.log("epoch.estimatedMP: ", epoch.estimatedMP);
-        console.log("pendingMPToBeMinted: ", pendingMPToBeMinted);
-        console.log("FOO: ", pendingMPToBeMinted - epoch.estimatedMP);
-
         // if (epoch.estimatedMP == 0) {
         //     return;
         // }
+        console.log("\tepoch.estimatedMP: ", epoch.estimatedMP);
         epoch.estimatedMP -= mpToMint;
+        console.log("\tepoch.estimatedMP - mpToMint: ", epoch.estimatedMP);
+        console.log("\tpendingMPToBeMinted: ", pendingMPToBeMinted);
         pendingMPToBeMinted -= mpToMint;
+        console.log("\tpendingMPToBeMinted - mptToMint: ", pendingMPToBeMinted);
+        console.log("\tpendingMPToBeMinted - epoch.estimatedMP: ", pendingMPToBeMinted - epoch.estimatedMP);
+
+        console.log("\tNEW: pendingMPToBeMinted: ", pendingMPToBeMinted);
     }
 
     /**
@@ -517,9 +523,10 @@ contract StakeManager is Ownable {
         uint256 _totalMP
     )
         private
-        pure
+        view
         returns (uint256 _maxMpToMint)
     {
+        console.log("\t\t_getMaxMPToMint -> _getMPToMint..");
         // Maximum multiplier point for given balance
         _maxMpToMint = _getMPToMint(_balance, MAX_BOOST * YEAR) + _bonusMP;
         if (_mpToMint + _totalMP > _maxMpToMint) {
@@ -537,7 +544,7 @@ contract StakeManager is Ownable {
      * @param _deltaTime time difference
      * @return multiplier points to mint
      */
-    function _getMPToMint(uint256 _balance, uint256 _deltaTime) private pure returns (uint256) {
+    function _getMPToMint(uint256 _balance, uint256 _deltaTime) private view returns (uint256) {
 
         // 30000000 * 604800 / 31.449.600 = 576.923,0769230769
         // 10000000 * 604800 / 31.449.600 = 192.307,6923076923
@@ -547,7 +554,14 @@ contract StakeManager is Ownable {
 
         // 576.923,0769230769 / 3 = 192.307,6923076923
         // 576.923,0769230769 / 3 = 192.307
-        return Math.mulDiv(_balance, _deltaTime, YEAR) * MP_APY;
+        console.log("\t\t_balance: ", _balance);
+        console.log("\t\t_deltatime: ", _deltaTime);
+        console.log("\t\tYEAR: ", YEAR);
+
+        uint256 res = Math.mulDiv(_balance, _deltaTime, YEAR, Math.Rounding.Up) * MP_APY;
+
+        console.log("\t\t(_balance * _deltaTime / YEAR) * MP_APY: ", res);
+        return res;
     }
 
     /**
