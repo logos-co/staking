@@ -128,9 +128,14 @@ contract StakeManager is Ownable {
             console.log("\tEstimating MPs for epoch...");
             epochs[currentEpoch].estimatedMP = _getMPToMint(
                 totalSupplyBalance - totalMpMaxBoostLimitBalance,
+                // block.timestamp - epochs[currentEpoch].startTime
                 EPOCH_SIZE
             );
             pendingMPToBeMinted += epochs[currentEpoch].estimatedMP;
+
+            // if (pendingMPToBeMinted % 2 != 0) {
+            //     pendingMPToBeMinted += 1;
+            // }
 
             //finalize current epoch
             epochs[currentEpoch].epochReward = epochReward();
@@ -225,6 +230,8 @@ contract StakeManager is Ownable {
 
         uint256 reducedMP = Math.mulDiv(_amount, account.totalMP, account.balance, Math.Rounding.Up);
         uint256 reducedInitialMP = Math.mulDiv(_amount, account.bonusMP, account.balance, Math.Rounding.Up);
+        // uint256 reducedMP = Math.mulDiv(_amount, account.totalMP, account.balance);
+        // uint256 reducedInitialMP = Math.mulDiv(_amount, account.bonusMP, account.balance);
 
         //mp estimation
         mpMaxBoostLimitEpochBalance[account.mpMaxBoostLimitEpoch] -= _amount; // some staked amount from the past
@@ -418,6 +425,7 @@ contract StakeManager is Ownable {
             _mintMP(account, iEpoch.startTime + EPOCH_SIZE, iEpoch);
             uint256 userSupply = account.balance + account.totalMP;
             uint256 userEpochReward = Math.mulDiv(userSupply, iEpoch.epochReward, iEpoch.totalSupply, Math.Rounding.Up);
+            // uint256 userEpochReward = Math.mulDiv(userSupply, iEpoch.epochReward, iEpoch.totalSupply);
 
             userReward += userEpochReward;
             iEpoch.epochReward -= userEpochReward;
@@ -520,7 +528,7 @@ contract StakeManager is Ownable {
         view
         returns (uint256 _maxMpToMint)
     {
-        console.log("\t\t_getMaxMPToMint -> _getMPToMint..");
+        // console.log("\t\t_getMaxMPToMint -> _getMPToMint..");
         // Maximum multiplier point for given balance
         _maxMpToMint = _getMPToMint(_balance, MAX_BOOST * YEAR) + _bonusMP;
         if (_mpToMint + _totalMP > _maxMpToMint) {
@@ -553,6 +561,7 @@ contract StakeManager is Ownable {
         console.log("\t\tYEAR: ", YEAR);
 
         uint256 res = Math.mulDiv(_balance, _deltaTime, YEAR, Math.Rounding.Up) * MP_APY;
+        // uint256 res = Math.mulDiv(_balance, _deltaTime, YEAR) * MP_APY;
 
         console.log("\t\t(_balance * _deltaTime / YEAR) * MP_APY: ", res);
         return res;

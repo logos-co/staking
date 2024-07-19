@@ -639,6 +639,9 @@ contract ExecuteAccountTest is StakeManagerTest {
 }
 
 contract UserFlowsTest is StakeManagerTest {
+
+    StakeVault[] private userVaults;
+
     function test_StakedSupplyShouldIncreaseAndDecreaseAgain() public {
         uint256 lockTime = 0;
         uint256 stakeAmount = 100;
@@ -680,6 +683,40 @@ contract UserFlowsTest is StakeManagerTest {
         assertEq(ERC20(stakeToken).balanceOf(address(userVault)), 0);
         assertEq(stakeManager.totalSupplyBalance(), 0);
     }
+
+    // function test_PendingMPToBeMintedCannotBeGreaterThanTotalSupplyMP(uint8 accountNum) public {
+    function test_PendingMPToBeMintedCannotBeGreaterThanTotalSupplyMP(uint8 accountNum) public {
+        uint256 stakeAmount = 10_000_000;
+
+        for (uint256 i = 0; i <= accountNum; i++) {
+            // deal(stakeToken, testUser, stakeAmount);
+            userVaults.push(_createStakingAccount(makeAddr(
+                string(abi.encode(keccak256(abi.encode(accountNum))))),
+                stakeAmount,
+                0
+            ));
+        }
+
+        uint256 epochsAmountToReachCap = 1;
+
+        for (uint256 i = 0; i < epochsAmountToReachCap; i++) {
+            vm.warp(stakeManager.epochEnd());
+            stakeManager.executeEpoch();
+            uint256 pendingMPToBeMintedBefore = stakeManager.pendingMPToBeMinted();
+            uint256 totalSupplyMP = stakeManager.totalSupplyMP();
+            for (uint256 j = 0; j < userVaults.length; j++) {
+                (address rewardAddress,,, uint256 totalMPBefore, uint256 lastMintBefore,, uint256 epochBefore,) =
+                    stakeManager.accounts(address(userVaults[j]));
+
+                stakeManager.executeAccount(address(userVaults[j]), epochBefore + 1);
+            }
+            uint256 pendingMPToBeMintedAfter = stakeManager.pendingMPToBeMinted();
+
+            assertEq(pendingMPToBeMintedBefore + totalSupplyMP, stakeManager.totalSupplyMP());
+            assertEq(pendingMPToBeMintedAfter, 0);
+        }
+    }
+
 }
 
 contract MigrationStakeManagerTest is StakeManagerTest {
