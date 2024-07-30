@@ -7,7 +7,7 @@ methods {
   function _.migrateFrom(address, bool, StakeManager.Account) external => NONDET;
   function _.increaseTotalMP(uint256) external => NONDET;
   function _.migrationInitialize(uint256,uint256,uint256,uint256) external => NONDET;
-  function accounts(address) external returns(address, uint256, uint256, uint256, uint256, uint256, uint256) envfree;
+  function accounts(address) external returns(address, uint256, uint256, uint256, uint256, uint256, uint256, uint256) envfree;
   function Math.mulDiv(uint256 a, uint256 b, uint256 c) internal returns uint256 => mulDivSummary(a,b,c);
 }
 
@@ -18,28 +18,28 @@ function mulDivSummary(uint256 a, uint256 b, uint256 c) returns uint256 {
 
 function getAccountBalance(address addr) returns uint256 {
   uint256 balance;
-  _, balance, _, _, _, _, _ = accounts(addr);
+  _, balance, _, _, _, _, _, _ = accounts(addr);
 
   return balance;
 }
 
 function getAccountBonusMultiplierPoints(address addr) returns uint256 {
   uint256 bonusMP;
-  _, _, bonusMP, _, _, _, _ = accounts(addr);
+  _, _, bonusMP, _, _, _, _, _ = accounts(addr);
 
   return bonusMP;
 }
 
 function getAccountCurrentMultiplierPoints(address addr) returns uint256 {
   uint256 totalMP;
-  _, _, _, totalMP, _, _, _ = accounts(addr);
+  _, _, _, totalMP, _, _, _, _  = accounts(addr);
 
   return totalMP;
 }
 
 function getAccountLockUntil(address addr) returns uint256 {
   uint256 lockUntil;
-  _, _, _, _, _, lockUntil, _ = accounts(addr);
+  _, _, _, _, _, lockUntil, _, _  = accounts(addr);
 
   return lockUntil;
 }

@@ -2,10 +2,11 @@ using ERC20A as staked;
 methods {
   function staked.balanceOf(address) external returns (uint256) envfree;
   function totalSupplyBalance() external returns (uint256) envfree;
-  function accounts(address) external returns(address, uint256, uint256, uint256, uint256, uint256, uint256) envfree;
+  function accounts(address) external returns(address, uint256, uint256, uint256, uint256, uint256, uint256, uint256) envfree;
 
   function _processAccount(StakeManager.Account storage account, uint256 _limitEpoch) internal with(env e) => markAccountProccessed(e.msg.sender, _limitEpoch);
   function _.migrationInitialize(uint256,uint256,uint256,uint256) external => NONDET;
+  function pendingMPToBeMinted() external returns (uint256) envfree;
 }
 
 // keeps track of the last epoch an account was processed
@@ -19,7 +20,7 @@ function markAccountProccessed(address account, uint256 _limitEpoch) {
 
 function getAccountLockUntil(address addr) returns uint256 {
   uint256 lockUntil;
-  _, _, _, _, _, lockUntil, _ = accounts(addr);
+  _, _, _, _, _, lockUntil, _, _ = accounts(addr);
 
   return lockUntil;
 }
@@ -68,6 +69,26 @@ rule checkAccountProcessedBeforeStoring(method f) filtered {
           balanceChangedInEpoch[account] == to_mathint(currentContract.currentEpoch);
 
 }
+
+rule pendingMPToMintShouldNotBeBiggerTotalSupplyMP(method f) filtered {
+  f -> !requiresPreviousManager(f) && !requiresNextManager(f)
+} {
+
+  calldataarg args;
+  env e;
+  address account;
+  address account2;
+  mathint amount;
+
+  uint256 pendingMPBefore = currentContract.pendingMPToBeMinted();
+  currentContract.stake(e, amount, 0);
+  uint256 pendingMPAfter = currentContract.pendingMPToBeMinted();
+
+  require e.block.timestamp > currentContract.currentEpoch()
+  currentContract.executeAccount(account1)
+  assert pendingMPAfter > pendingMPBefore;
+}
+
 
 /*
 Below is a rule that finds all methods that change an account's balance.
