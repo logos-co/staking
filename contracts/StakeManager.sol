@@ -60,7 +60,7 @@ contract StakeManager is Ownable {
     uint256 public pendingMPToBeMinted;
     uint256 public totalSupplyMP;
     uint256 public totalSupplyBalance;
-    uint256 public totalMpMaxBoostLimitBalance;
+    uint256 public totalMPPerEpoch;
 
     mapping(uint256 epochId => uint256 balance) public mpMaxBoostLimitEpochBalance;
 
@@ -124,13 +124,9 @@ contract StakeManager is Ownable {
 
             console.log("\n");
             console.log("Finalizing epoch...");
-            totalMpMaxBoostLimitBalance += mpMaxBoostLimitEpochBalance[currentEpoch];
+            totalMPPerEpoch -= mpMaxBoostLimitEpochBalance[currentEpoch];
             console.log("\tEstimating MPs for epoch...");
-            epochs[currentEpoch].estimatedMP = _getMPToMint(
-                totalSupplyBalance - totalMpMaxBoostLimitBalance,
-                // block.timestamp - epochs[currentEpoch].startTime
-                EPOCH_SIZE
-            );
+            epochs[currentEpoch].estimatedMP = totalMPPerEpoch;
             pendingMPToBeMinted += epochs[currentEpoch].estimatedMP;
 
             // if (pendingMPToBeMinted % 2 != 0) {
@@ -198,10 +194,13 @@ contract StakeManager is Ownable {
         _mintBonusMP(account, deltaTime, _amount);
 
         //mp estimation
+        uint256 mpPerEpoch = _getMPToMint(_amount, EPOCH_SIZE);
+        totalMPPerEpoch += mpPerEpoch;
+        console.log("\ttotalMPPerEpoch: ", totalMPPerEpoch);
         uint256 mpMaxBoostLimitEpoch = currentEpoch + MAX_BOOST_LIMIT_EPOCH_COUNT + 1;
-        mpMaxBoostLimitEpochBalance[mpMaxBoostLimitEpoch] += _amount; // some staked amount from the past
+        mpMaxBoostLimitEpochBalance[mpMaxBoostLimitEpoch] += mpPerEpoch; // some staked amount from the past
         account.mpMaxBoostLimitEpoch = mpMaxBoostLimitEpoch;
-
+        
         //update storage
         totalSupplyBalance += _amount;
         account.balance += _amount;
@@ -230,15 +229,16 @@ contract StakeManager is Ownable {
         }
         _processAccount(account, currentEpoch);
 
-        uint256 reducedMP = Math.mulDiv(_amount, account.totalMP, account.balance, Math.Rounding.Up);
-        uint256 reducedInitialMP = Math.mulDiv(_amount, account.bonusMP, account.balance, Math.Rounding.Up);
+        uint256 reducedMP = Math.mulDiv(_amount, account.totalMP, account.balance);
+        uint256 reducedInitialMP = Math.mulDiv(_amount, account.bonusMP, account.balance);
         // uint256 reducedMP = Math.mulDiv(_amount, account.totalMP, account.balance);
         // uint256 reducedInitialMP = Math.mulDiv(_amount, account.bonusMP, account.balance);
 
         //mp estimation
-        mpMaxBoostLimitEpochBalance[account.mpMaxBoostLimitEpoch] -= _amount; // some staked amount from the past
+        uint256 mpPerEpoch = _getMPToMint(account.balance, EPOCH_SIZE);
+        mpMaxBoostLimitEpochBalance[account.mpMaxBoostLimitEpoch] -= mpPerEpoch; // some staked amount from the past
         if(account.mpMaxBoostLimitEpoch < currentEpoch) {
-            totalMpMaxBoostLimitBalance -= _amount;
+            totalMPPerEpoch -= mpPerEpoch;
         }
 
         //update storage
@@ -430,7 +430,7 @@ contract StakeManager is Ownable {
             console.log("\tProcessing account epoch: ", userEpoch);
             _mintMP(account, iEpoch.startTime + EPOCH_SIZE, iEpoch);
             uint256 userSupply = account.balance + account.totalMP;
-            uint256 userEpochReward = Math.mulDiv(userSupply, iEpoch.epochReward, iEpoch.totalSupply, Math.Rounding.Up);
+            uint256 userEpochReward = Math.mulDiv(userSupply, iEpoch.epochReward, iEpoch.totalSupply);
             // uint256 userEpochReward = Math.mulDiv(userSupply, iEpoch.epochReward, iEpoch.totalSupply);
 
             userReward += userEpochReward;
@@ -566,7 +566,7 @@ contract StakeManager is Ownable {
         console.log("\t\t_deltatime: ", _deltaTime);
         console.log("\t\tYEAR: ", YEAR);
 
-        uint256 res = Math.mulDiv(_balance, _deltaTime, YEAR, Math.Rounding.Up) * MP_APY;
+        uint256 res = Math.mulDiv(_balance, _deltaTime, YEAR) * MP_APY;
         // uint256 res = Math.mulDiv(_balance, _deltaTime, YEAR) * MP_APY;
 
         console.log("\t\t(_balance * _deltaTime / YEAR) * MP_APY: ", res);
