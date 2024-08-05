@@ -62,7 +62,7 @@ contract StakeManager is Ownable {
     uint256 public totalSupplyBalance;
     uint256 public totalMPPerEpoch;
 
-    mapping(uint256 epochId => uint256 balance) public mpMaxBoostLimitEpochBalance;
+    mapping(uint256 epochId => uint256 balance) public expiredMPPerEpoch;
 
     StakeManager public migration;
     StakeManager public immutable previousManager;
@@ -124,7 +124,7 @@ contract StakeManager is Ownable {
 
             console.log("\n");
             console.log("Finalizing epoch...");
-            totalMPPerEpoch -= mpMaxBoostLimitEpochBalance[currentEpoch];
+            totalMPPerEpoch -= expiredMPPerEpoch[currentEpoch];
             console.log("\tEstimating MPs for epoch...");
             epochs[currentEpoch].estimatedMP = totalMPPerEpoch;
             pendingMPToBeMinted += epochs[currentEpoch].estimatedMP;
@@ -195,10 +195,11 @@ contract StakeManager is Ownable {
 
         //mp estimation
         uint256 mpPerEpoch = _getMPToMint(_amount, EPOCH_SIZE);
+        expiredMPPerEpoch[currentEpoch] += _getMPToMint(_amount, block.timestamp - epochs[currentEpoch].startTime);
         totalMPPerEpoch += mpPerEpoch;
         console.log("\ttotalMPPerEpoch: ", totalMPPerEpoch);
         uint256 mpMaxBoostLimitEpoch = currentEpoch + MAX_BOOST_LIMIT_EPOCH_COUNT + 1;
-        mpMaxBoostLimitEpochBalance[mpMaxBoostLimitEpoch] += mpPerEpoch; // some staked amount from the past
+        expiredMPPerEpoch[mpMaxBoostLimitEpoch] += mpPerEpoch; // some staked amount from the past
         account.mpMaxBoostLimitEpoch = mpMaxBoostLimitEpoch;
         
         //update storage
@@ -236,7 +237,7 @@ contract StakeManager is Ownable {
 
         //mp estimation
         uint256 mpPerEpoch = _getMPToMint(account.balance, EPOCH_SIZE);
-        mpMaxBoostLimitEpochBalance[account.mpMaxBoostLimitEpoch] -= mpPerEpoch; // some staked amount from the past
+        expiredMPPerEpoch[account.mpMaxBoostLimitEpoch] -= mpPerEpoch; // some staked amount from the past
         if(account.mpMaxBoostLimitEpoch < currentEpoch) {
             totalMPPerEpoch -= mpPerEpoch;
         }
