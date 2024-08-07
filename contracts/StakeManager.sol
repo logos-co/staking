@@ -1,5 +1,4 @@
 // SPDX-License-Identifier: MIT
-
 pragma solidity ^0.8.18;
 
 import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
@@ -7,7 +6,6 @@ import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 
 import { StakeVault } from "./StakeVault.sol";
-import { console } from "forge-std/console.sol";
 
 contract StakeManager is Ownable {
     error StakeManager__SenderIsNotVault();
@@ -38,7 +36,6 @@ contract StakeManager is Ownable {
         uint256 startTime;
         uint256 epochReward;
         uint256 totalSupply;
-        //uint256 totalSupplyBalance;
         uint256 estimatedMP;
     }
 
@@ -121,26 +118,14 @@ contract StakeManager is Ownable {
     modifier finalizeEpoch() {
         if (block.timestamp >= epochEnd() && address(migration) == address(0)) {
             //mp estimation
-
-            console.log("\n");
-            console.log("Finalizing epoch...");
             totalMPPerEpoch -= expiredMPPerEpoch[currentEpoch];
-            console.log("\tEstimating MPs for epoch...");
             epochs[currentEpoch].estimatedMP = totalMPPerEpoch;
             pendingMPToBeMinted += epochs[currentEpoch].estimatedMP;
-
-            // if (pendingMPToBeMinted % 2 != 0) {
-            //     pendingMPToBeMinted += 1;
-            // }
 
             //finalize current epoch
             epochs[currentEpoch].epochReward = epochReward();
             epochs[currentEpoch].totalSupply = totalSupply();
             pendingReward += epochs[currentEpoch].epochReward;
-            //epochs[currentEpoch].totalSupplyBalance = totalSupplyBalance;
-
-            console.log("\tcurrentEpoch.estimatedMP: ", epochs[currentEpoch].estimatedMP);
-            console.log("\tpendingMPToBeMinted: ", pendingMPToBeMinted);
 
             //create new epoch
             currentEpoch++;
@@ -197,7 +182,6 @@ contract StakeManager is Ownable {
         uint256 mpPerEpoch = _getMPToMint(_amount, EPOCH_SIZE);
         expiredMPPerEpoch[currentEpoch] += _getMPToMint(_amount, block.timestamp - epochs[currentEpoch].startTime);
         totalMPPerEpoch += mpPerEpoch;
-        console.log("\ttotalMPPerEpoch: ", totalMPPerEpoch);
         uint256 mpMaxBoostLimitEpoch = currentEpoch + MAX_BOOST_LIMIT_EPOCH_COUNT + 1;
         expiredMPPerEpoch[mpMaxBoostLimitEpoch] += mpPerEpoch; // some staked amount from the past
         account.mpMaxBoostLimitEpoch = mpMaxBoostLimitEpoch;
@@ -301,7 +285,6 @@ contract StakeManager is Ownable {
         onlyAccountInitialized(_vault)
         finalizeEpoch
     {
-        console.log("Processing account rewards for epochs...");
         _processAccount(accounts[_vault], _limitEpoch);
     }
 
@@ -422,11 +405,9 @@ contract StakeManager is Ownable {
         uint256 mpDifference = account.totalMP;
         for (Epoch storage iEpoch = epochs[userEpoch]; userEpoch < _limitEpoch; userEpoch++) {
             //mint multiplier points to that epoch
-            console.log("\tProcessing account epoch: ", userEpoch);
             _mintMP(account, iEpoch.startTime + EPOCH_SIZE, iEpoch);
             uint256 userSupply = account.balance + account.totalMP;
             uint256 userEpochReward = Math.mulDiv(userSupply, iEpoch.epochReward, iEpoch.totalSupply);
-            // uint256 userEpochReward = Math.mulDiv(userSupply, iEpoch.epochReward, iEpoch.totalSupply);
 
             userReward += userEpochReward;
             iEpoch.epochReward -= userEpochReward;
@@ -495,20 +476,10 @@ contract StakeManager is Ownable {
         totalSupplyMP += mpToMint;
         epoch.totalSupply += mpToMint;
 
-        console.log("\tmpToMint: ", mpToMint);
         //mp estimation
-        // if (epoch.estimatedMP == 0) {
-        //     return;
-        // }
-        console.log("\tepoch.estimatedMP: ", epoch.estimatedMP);
         epoch.estimatedMP -= mpToMint;
-        console.log("\tepoch.estimatedMP - mpToMint: ", epoch.estimatedMP);
-        console.log("\tpendingMPToBeMinted: ", pendingMPToBeMinted);
         pendingMPToBeMinted -= mpToMint;
-        console.log("\tpendingMPToBeMinted - mptToMint: ", pendingMPToBeMinted);
-        console.log("\tpendingMPToBeMinted - epoch.estimatedMP: ", pendingMPToBeMinted - epoch.estimatedMP);
 
-        console.log("\tNEW: pendingMPToBeMinted: ", pendingMPToBeMinted);
     }
 
     /**
@@ -529,7 +500,6 @@ contract StakeManager is Ownable {
         view
         returns (uint256 _maxMpToMint)
     {
-        // console.log("\t\t_getMaxMPToMint -> _getMPToMint..");
         // Maximum multiplier point for given balance
         _maxMpToMint = _getMPToMint(_balance, MAX_BOOST * YEAR) + _bonusMP;
         if (_mpToMint + _totalMP > _maxMpToMint) {
@@ -547,24 +517,8 @@ contract StakeManager is Ownable {
      * @param _deltaTime time difference
      * @return multiplier points to mint
      */
-    function _getMPToMint(uint256 _balance, uint256 _deltaTime) private view returns (uint256) {
-
-        // 30000000 * 604800 / 31.449.600 = 576.923,0769230769
-        // 10000000 * 604800 / 31.449.600 = 192.307,6923076923
-
-        // 30000000 * 604800 / 31.449.600 = 576.923
-        // 192.307,6666666667 => 192.307
-
-        // 576.923,0769230769 / 3 = 192.307,6923076923
-        // 576.923,0769230769 / 3 = 192.307
-        console.log("\t\t_balance: ", _balance);
-        console.log("\t\t_deltatime: ", _deltaTime);
-        console.log("\t\tYEAR: ", YEAR);
-
+    function _getMPToMint(uint256 _balance, uint256 _deltaTime) private pure returns (uint256) {
         uint256 res = Math.mulDiv(_balance, _deltaTime, YEAR) * MP_APY;
-        // uint256 res = Math.mulDiv(_balance, _deltaTime, YEAR) * MP_APY;
-
-        console.log("\t\t(_balance * _deltaTime / YEAR) * MP_APY: ", res);
         return res;
     }
 
