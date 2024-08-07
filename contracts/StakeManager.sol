@@ -20,6 +20,7 @@ contract StakeManager is Ownable {
     error StakeManager__AlreadyProcessedEpochs();
     error StakeManager__InsufficientFunds();
     error StakeManager__AlreadyStaked();
+    error StakeManager__StakeIsTooLow();
 
     struct Account {
         address rewardAddress;
@@ -45,7 +46,6 @@ contract StakeManager is Ownable {
     uint256 public constant MAX_LOCKUP_PERIOD = 4 * YEAR; // 4 years
     uint256 public constant MP_APY = 1;
     uint256 public constant MAX_BOOST = 4;
-    uint256 public constant MAX_BOOST_LIMIT_EPOCH_COUNT = (MAX_BOOST * YEAR) / EPOCH_SIZE;
 
     mapping(address index => Account value) public accounts;
     mapping(uint256 index => Epoch value) public epochs;
@@ -60,6 +60,7 @@ contract StakeManager is Ownable {
     uint256 public totalMPPerEpoch;
 
     mapping(uint256 epochId => uint256 balance) public expiredMPPerEpoch;
+    uint256 currentEpochExpiredMP;
 
     StakeManager public migration;
     StakeManager public immutable previousManager;
@@ -118,8 +119,12 @@ contract StakeManager is Ownable {
     modifier finalizeEpoch() {
         if (block.timestamp >= epochEnd() && address(migration) == address(0)) {
             //mp estimation
-            totalMPPerEpoch -= expiredMPPerEpoch[currentEpoch];
-            epochs[currentEpoch].estimatedMP = totalMPPerEpoch;
+            if(expiredMPPerEpoch[currentEpoch] > 0){
+                totalMPPerEpoch -= expiredMPPerEpoch[currentEpoch];
+                delete expiredMPPerEpoch[currentEpoch];
+            }
+            epochs[currentEpoch].estimatedMP = totalMPPerEpoch - currentEpochExpiredMP;
+            delete currentEpochExpiredMP;
             pendingMPToBeMinted += epochs[currentEpoch].estimatedMP;
 
             //finalize current epoch
@@ -180,10 +185,20 @@ contract StakeManager is Ownable {
 
         //mp estimation
         uint256 mpPerEpoch = _getMPToMint(_amount, EPOCH_SIZE);
-        expiredMPPerEpoch[currentEpoch] += _getMPToMint(_amount, block.timestamp - epochs[currentEpoch].startTime);
+        if(mpPerEpoch < 1){
+            revert StakeManager__StakeIsTooLow();
+        }
+        uint256 thisEpochExpiredMP = _getMPToMint(_amount, block.timestamp - epochs[currentEpoch].startTime);
+        currentEpochExpiredMP += thisEpochExpiredMP; //TODO: SHIFT ESTIMATION TO LAST EPOCH
         totalMPPerEpoch += mpPerEpoch;
-        uint256 mpMaxBoostLimitEpoch = currentEpoch + MAX_BOOST_LIMIT_EPOCH_COUNT + 1;
-        expiredMPPerEpoch[mpMaxBoostLimitEpoch] += mpPerEpoch; // some staked amount from the past
+        uint256 maxMpToMint = _getMPToMint(_amount, MAX_BOOST * YEAR);
+        uint256 mpMaxBoostLimitEpochCount = maxMpToMint / mpPerEpoch;
+        uint256 mpMaxBoostLimitEpoch = currentEpoch + mpMaxBoostLimitEpochCount;
+        uint256 lastEpochAmountToMint = ((mpPerEpoch * (mpMaxBoostLimitEpochCount+1)) - maxMpToMint);
+        
+        expiredMPPerEpoch[mpMaxBoostLimitEpoch] += lastEpochAmountToMint; // some staked amount from the past
+        expiredMPPerEpoch[mpMaxBoostLimitEpoch+1] += mpPerEpoch - lastEpochAmountToMint;
+        
         account.mpMaxBoostLimitEpoch = mpMaxBoostLimitEpoch;
         
         //update storage
@@ -406,10 +421,10 @@ contract StakeManager is Ownable {
             _mintMP(account, iEpoch.startTime + EPOCH_SIZE, iEpoch);
             uint256 userSupply = account.balance + account.totalMP;
             uint256 userEpochReward = Math.mulDiv(userSupply, iEpoch.epochReward, iEpoch.totalSupply);
-
             userReward += userEpochReward;
             iEpoch.epochReward -= userEpochReward;
             iEpoch.totalSupply -= userSupply;
+            //TODO: remove epoch when iEpoch.totalSupply reaches zero
         }
         account.epoch = userEpoch;
         if (userReward > 0) {
@@ -472,7 +487,6 @@ contract StakeManager is Ownable {
         account.lastMint = processTime;
         account.totalMP += mpToMint;
         totalSupplyMP += mpToMint;
-        epoch.totalSupply += mpToMint;
 
         //mp estimation
         epoch.estimatedMP -= mpToMint;
@@ -495,7 +509,7 @@ contract StakeManager is Ownable {
         uint256 _totalMP
     )
         private
-        view
+        pure
         returns (uint256 _maxMpToMint)
     {
         // Maximum multiplier point for given balance
@@ -519,7 +533,15 @@ contract StakeManager is Ownable {
         uint256 res = Math.mulDiv(_balance, _deltaTime, YEAR) * MP_APY;
         return res;
     }
-
+    /*
+     * @notice Calculates multiplier points to mint for given balance and time
+     * @param _balance balance of account
+     * @param _deltaTime time difference
+     * @return multiplier points to mint
+     */
+    function calculateMPToMint(uint256 _balance, uint256 _deltaTime) public pure returns (uint256) {
+        return _getMPToMint(_balance, _deltaTime);
+    }
     /**
      * @notice Returns total of multiplier points and balance,
      * and the pending MPs that would be minted if all accounts were processed
