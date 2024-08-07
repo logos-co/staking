@@ -216,8 +216,6 @@ contract StakeManager is Ownable {
 
         uint256 reducedMP = Math.mulDiv(_amount, account.totalMP, account.balance);
         uint256 reducedInitialMP = Math.mulDiv(_amount, account.bonusMP, account.balance);
-        // uint256 reducedMP = Math.mulDiv(_amount, account.totalMP, account.balance);
-        // uint256 reducedInitialMP = Math.mulDiv(_amount, account.bonusMP, account.balance);
 
         //mp estimation
         uint256 mpPerEpoch = _getMPToMint(account.balance, EPOCH_SIZE);
