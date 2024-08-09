@@ -1,37 +1,37 @@
 | contracts/StakeManager.sol:StakeManager contract |                 |        |        |        |         |
 |--------------------------------------------------|-----------------|--------|--------|--------|---------|
 | Deployment Cost                                  | Deployment Size |        |        |        |         |
-| 2510602                                          | 12755           |        |        |        |         |
+| 2520217                                          | 12803           |        |        |        |         |
 | Function Name                                    | min             | avg    | median | max    | # calls |
-| EPOCH_SIZE                                       | 285             | 285    | 285    | 285    | 15      |
-| MAX_BOOST                                        | 307             | 307    | 307    | 307    | 1       |
+| EPOCH_SIZE                                       | 285             | 285    | 285    | 285    | 55      |
+| MAX_BOOST                                        | 285             | 285    | 285    | 285    | 1       |
 | MAX_LOCKUP_PERIOD                                | 405             | 405    | 405    | 405    | 4       |
-| MIN_LOCKUP_PERIOD                                | 264             | 264    | 264    | 264    | 10      |
+| MIN_LOCKUP_PERIOD                                | 287             | 287    | 287    | 287    | 10      |
 | YEAR                                             | 285             | 285    | 285    | 285    | 1       |
-| accounts                                         | 1539            | 1539   | 1539   | 1539   | 712     |
+| accounts                                         | 1539            | 1539   | 1539   | 1539   | 3565    |
 | calculateMPToMint                                | 718             | 718    | 718    | 718    | 2       |
 | currentEpoch                                     | 364             | 1697   | 2364   | 2364   | 27      |
-| epochEnd                                         | 649             | 677    | 649    | 4649   | 276     |
-| epochReward                                      | 1413            | 2913   | 1413   | 5913   | 3       |
-| executeAccount                                   | 1311            | 28236  | 26682  | 147584 | 535     |
-| executeEpoch                                     | 394             | 132620 | 135587 | 159487 | 223     |
-| isVault                                          | 517             | 660    | 517    | 2517   | 278     |
+| epochEnd                                         | 649             | 677    | 649    | 4649   | 283     |
+| epochReward                                      | 1391            | 2891   | 1391   | 5891   | 3       |
+| executeAccount                                   | 1311            | 14580  | 10670  | 147584 | 1890    |
+| executeEpoch                                     | 394             | 132794 | 135587 | 159487 | 223     |
+| isVault                                          | 517             | 798    | 517    | 2517   | 142     |
 | lock                                             | 2658            | 18188  | 4778   | 104477 | 7       |
 | migrateTo                                        | 1019            | 1691   | 1019   | 2699   | 5       |
-| migration                                        | 371             | 1371   | 1371   | 2371   | 4       |
+| migration                                        | 415             | 1415   | 1415   | 2415   | 4       |
 | migrationInitialize                              | 582             | 8217   | 10413  | 11463  | 4       |
 | owner                                            | 2364            | 2364   | 2364   | 2364   | 13      |
 | pendingMPToBeMinted                              | 386             | 386    | 386    | 386    | 2       |
-| pendingReward                                    | 386             | 1420   | 2386   | 2386   | 29      |
-| previousManager                                  | 240             | 240    | 240    | 240    | 13      |
+| pendingReward                                    | 364             | 1398   | 2364   | 2364   | 29      |
+| previousManager                                  | 263             | 263    | 263    | 263    | 13      |
 | setVault                                         | 22628           | 22628  | 22628  | 22628  | 20      |
-| stake                                            | 2661            | 170242 | 164372 | 282909 | 280     |
-| stakedToken                                      | 283             | 283    | 283    | 283    | 294     |
+| stake                                            | 2661            | 176334 | 164635 | 283172 | 144     |
+| stakedToken                                      | 283             | 283    | 283    | 283    | 158     |
 | startMigration                                   | 52778           | 55844  | 57378  | 57378  | 3       |
-| totalSupply                                      | 762             | 1943   | 2762   | 2762   | 22      |
+| totalSupply                                      | 740             | 1921   | 2740   | 2740   | 22      |
 | totalSupplyBalance                               | 362             | 1762   | 2362   | 2362   | 20      |
 | totalSupplyMP                                    | 362             | 1579   | 2362   | 2362   | 23      |
-| unstake                                          | 1730            | 31154  | 6267   | 151766 | 11      |
+| unstake                                          | 1708            | 31132  | 6245   | 151744 | 11      |
 
 
 | contracts/StakeVault.sol:StakeVault contract |                 |        |        |        |         |
@@ -42,10 +42,10 @@
 | acceptMigration                              | 1704            | 1704   | 1704   | 1704   | 2       |
 | leave                                        | 1690            | 1690   | 1690   | 1690   | 1       |
 | lock                                         | 3731            | 21633  | 5635   | 105334 | 6       |
-| owner                                        | 362             | 362    | 362    | 362    | 280     |
-| stake                                        | 3433            | 200896 | 195147 | 313684 | 280     |
+| owner                                        | 362             | 362    | 362    | 362    | 144     |
+| stake                                        | 3433            | 206875 | 195410 | 313947 | 144     |
 | stakedToken                                  | 212             | 212    | 212    | 212    | 2       |
-| unstake                                      | 2588            | 39277  | 10588  | 156087 | 10      |
+| unstake                                      | 2566            | 39255  | 10566  | 156065 | 10      |
 
 
 | contracts/VaultFactory.sol:VaultFactory contract |                 |        |        |        |         |
@@ -53,7 +53,7 @@
 | Deployment Cost                                  | Deployment Size |        |        |        |         |
 | 1043406                                          | 5305            |        |        |        |         |
 | Function Name                                    | min             | avg    | median | max    | # calls |
-| createVault                                      | 670977          | 671242 | 670977 | 675477 | 281     |
+| createVault                                      | 670977          | 671490 | 670977 | 675477 | 145     |
 | setStakeManager                                  | 2518            | 5317   | 4644   | 8790   | 3       |
 | stakeManager                                     | 368             | 1868   | 2368   | 2368   | 4       |
 
@@ -63,26 +63,26 @@
 | Deployment Cost                                                           | Deployment Size |       |        |       |         |
 | 649818                                                                    | 3562            |       |        |       |         |
 | Function Name                                                             | min             | avg   | median | max   | # calls |
-| approve                                                                   | 24603           | 24603 | 24603  | 24603 | 278     |
-| balanceOf                                                                 | 561             | 601   | 561    | 2561  | 1765    |
-| transfer                                                                  | 3034            | 3486  | 3034   | 22934 | 233     |
-| transferFrom                                                              | 27530           | 27530 | 27530  | 27530 | 279     |
+| approve                                                                   | 24603           | 24603 | 24603  | 24603 | 142     |
+| balanceOf                                                                 | 561             | 580   | 561    | 2561  | 4496    |
+| transfer                                                                  | 3034            | 3175  | 3034   | 22934 | 1731    |
+| transferFrom                                                              | 27530           | 27530 | 27530  | 27530 | 143     |
 
 
 | script/Deploy.s.sol:Deploy contract |                 |         |         |         |         |
 |-------------------------------------|-----------------|---------|---------|---------|---------|
 | Deployment Cost                     | Deployment Size |         |         |         |         |
-| 5595244                             | 29252           |         |         |         |         |
+| 5604853                             | 29300           |         |         |         |         |
 | Function Name                       | min             | avg     | median  | max     | # calls |
-| run                                 | 5290750         | 5290750 | 5290750 | 5290750 | 54      |
+| run                                 | 5300380         | 5300380 | 5300380 | 5300380 | 54      |
 
 
 | script/DeployMigrationStakeManager.s.sol:DeployMigrationStakeManager contract |                 |         |         |         |         |
 |-------------------------------------------------------------------------------|-----------------|---------|---------|---------|---------|
 | Deployment Cost                                                               | Deployment Size |         |         |         |         |
-| 2944633                                                                       | 16020           |         |         |         |         |
+| 2954241                                                                       | 16068           |         |         |         |         |
 | Function Name                                                                 | min             | avg     | median  | max     | # calls |
-| run                                                                           | 2548285         | 2548285 | 2548285 | 2548285 | 9       |
+| run                                                                           | 2557915         | 2557915 | 2557915 | 2557915 | 9       |
 
 
 | script/DeploymentConfig.s.sol:DeploymentConfig contract |                 |     |        |     |         |
@@ -106,9 +106,9 @@
 | test/script/DeployBroken.s.sol:DeployBroken contract |                 |         |         |         |         |
 |------------------------------------------------------|-----------------|---------|---------|---------|---------|
 | Deployment Cost                                      | Deployment Size |         |         |         |         |
-| 4367919                                              | 23050           |         |         |         |         |
+| 4377537                                              | 23098           |         |         |         |         |
 | Function Name                                        | min             | avg     | median  | max     | # calls |
-| run                                                  | 4130572         | 4130572 | 4130572 | 4130572 | 1       |
+| run                                                  | 4140202         | 4140202 | 4140202 | 4140202 | 1       |
 
 
 
