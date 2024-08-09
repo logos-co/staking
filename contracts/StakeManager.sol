@@ -55,12 +55,12 @@ contract StakeManager is Ownable {
     uint256 public pendingReward;
 
     uint256 public pendingMPToBeMinted;
-    uint256 public totalSupplyMP;
+    uint256 public totalSupplyMP; //TODO: rename it to something better
     uint256 public totalSupplyBalance;
     uint256 public totalMPPerEpoch;
 
     mapping(uint256 epochId => uint256 balance) public expiredMPPerEpoch;
-    uint256 currentEpochExpiredMP;
+    uint256 public currentEpochExpiredMP;
 
     StakeManager public migration;
     StakeManager public immutable previousManager;
@@ -188,11 +188,11 @@ contract StakeManager is Ownable {
         if(mpPerEpoch < 1){
             revert StakeManager__StakeIsTooLow();
         }
-        uint256 thisEpochExpiredMP = _getMPToMint(_amount, block.timestamp - epochs[currentEpoch].startTime);
-        currentEpochExpiredMP += thisEpochExpiredMP; //TODO: SHIFT ESTIMATION TO LAST EPOCH
+        uint256 thisEpochExpiredMP = mpPerEpoch - _getMPToMint(_amount, epochEnd() - block.timestamp);
+        currentEpochExpiredMP += thisEpochExpiredMP; 
         totalMPPerEpoch += mpPerEpoch;
-        uint256 maxMpToMint = _getMPToMint(_amount, MAX_BOOST * YEAR);
-        uint256 mpMaxBoostLimitEpochCount = maxMpToMint / mpPerEpoch;
+        uint256 maxMpToMint = _getMPToMint(_amount, MAX_BOOST * YEAR) + thisEpochExpiredMP;
+        uint256 mpMaxBoostLimitEpochCount = (maxMpToMint) / mpPerEpoch;
         uint256 mpMaxBoostLimitEpoch = currentEpoch + mpMaxBoostLimitEpochCount;
         uint256 lastEpochAmountToMint = ((mpPerEpoch * (mpMaxBoostLimitEpochCount+1)) - maxMpToMint);
         
@@ -437,7 +437,7 @@ contract StakeManager is Ownable {
             pendingReward -= userReward;
             stakedToken.transfer(account.rewardAddress, userReward);
         }
-        mpDifference = account.totalMP - mpDifference;
+        mpDifference = account.totalMP - mpDifference; //TODO: optimize, this only needed for migration
         if (address(migration) != address(0)) {
             migration.increaseTotalMP(mpDifference);
         } else if (userEpoch == currentEpoch) {
