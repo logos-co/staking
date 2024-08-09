@@ -6,6 +6,7 @@ import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 
 import { StakeVault } from "./StakeVault.sol";
+import "forge-std/console.sol";
 
 contract StakeManager is Ownable {
     error StakeManager__SenderIsNotVault();
@@ -118,12 +119,17 @@ contract StakeManager is Ownable {
      */
     modifier finalizeEpoch() {
         if (block.timestamp >= epochEnd() && address(migration) == address(0)) {
+            console.log("############### finalizeEpoch %s ###############", currentEpoch);
             //mp estimation
             if(expiredMPPerEpoch[currentEpoch] > 0){
+                console.log("### expiredMPPerEpoch[%s]: %s", currentEpoch, expiredMPPerEpoch[currentEpoch]);
                 totalMPPerEpoch -= expiredMPPerEpoch[currentEpoch];
                 delete expiredMPPerEpoch[currentEpoch];
             }
             epochs[currentEpoch].estimatedMP = totalMPPerEpoch - currentEpochExpiredMP;
+            console.log("### currentEpochExpiredMP: %s", currentEpochExpiredMP);
+            console.log("### totalMPPerEpoch: %s", totalMPPerEpoch);
+            console.log("### epochs[%s].estimatedMP: %s", currentEpoch, epochs[currentEpoch].estimatedMP);
             delete currentEpochExpiredMP;
             pendingMPToBeMinted += epochs[currentEpoch].estimatedMP;
 
@@ -153,6 +159,9 @@ contract StakeManager is Ownable {
      * @dev Reverts when resulting locked time is not in range of [MIN_LOCKUP_PERIOD, MAX_LOCKUP_PERIOD]
      */
     function stake(uint256 _amount, uint256 _timeToIncrease) external onlyVault noPendingMigration finalizeEpoch {
+        console.log("*************** stake ***************");  
+        console.logBytes4(bytes4(abi.encodePacked(msg.sender)));      
+        console.log("*** amount: %s", _amount);     
         Account storage account = accounts[msg.sender];
         if (account.balance > 0) {
             revert StakeManager__AlreadyStaked();
@@ -196,9 +205,17 @@ contract StakeManager is Ownable {
         uint256 mpMaxBoostLimitEpoch = currentEpoch + mpMaxBoostLimitEpochCount;
         uint256 lastEpochAmountToMint = ((mpPerEpoch * (mpMaxBoostLimitEpochCount+1)) - maxMpToMint);
         
-        expiredMPPerEpoch[mpMaxBoostLimitEpoch] += lastEpochAmountToMint; // some staked amount from the past
+        expiredMPPerEpoch[mpMaxBoostLimitEpoch] += lastEpochAmountToMint ; // some staked amount from the past
         expiredMPPerEpoch[mpMaxBoostLimitEpoch+1] += mpPerEpoch - lastEpochAmountToMint;
-        
+  
+        console.log("*** mpPerEpoch: %s", mpPerEpoch);
+        console.log("*** maxMpToMint: %s", maxMpToMint);
+        console.log("*** thisEpochExpiredTime: %s", block.timestamp - epochs[currentEpoch].startTime);
+        console.log("*** thisEpochExpiredMP: %s", thisEpochExpiredMP);
+        console.log("*** mpMaxBoostLimitEpochCount: %s", mpMaxBoostLimitEpochCount);
+        console.log("*** expiredMPPerEpoch[%s] += %s", mpMaxBoostLimitEpoch, lastEpochAmountToMint);
+        console.log("*** expiredMPPerEpoch[%s] += %s", mpMaxBoostLimitEpoch+1, mpPerEpoch - lastEpochAmountToMint);
+    
         account.mpMaxBoostLimitEpoch = mpMaxBoostLimitEpoch;
         
         //update storage
@@ -298,6 +315,8 @@ contract StakeManager is Ownable {
         onlyAccountInitialized(_vault)
         finalizeEpoch
     {
+        console.log("&&&&&&&&&&&&&&& executeAccount up to %s &&&&&&&&&&&&&&&", _limitEpoch);
+        console.logBytes4(bytes4(abi.encodePacked(_vault)));
         _processAccount(accounts[_vault], _limitEpoch);
     }
 
@@ -416,14 +435,22 @@ contract StakeManager is Ownable {
         uint256 userReward;
         uint256 userEpoch = account.epoch;
         uint256 mpDifference = account.totalMP;
+        console.log("--- account.totalMP %s", account.totalMP);
         for (Epoch storage iEpoch = epochs[userEpoch]; userEpoch < _limitEpoch; userEpoch++) {
+            console.log("----- processAccount: userEpoch %s", userEpoch);
+            console.log("----- iEpoch.estimatedMP: %s", iEpoch.estimatedMP);	
             //mint multiplier points to that epoch
             _mintMP(account, iEpoch.startTime + EPOCH_SIZE, iEpoch);
+            console.log("----- account.totalMP: %s", account.totalMP);
+            
             uint256 userSupply = account.balance + account.totalMP;
             uint256 userEpochReward = Math.mulDiv(userSupply, iEpoch.epochReward, iEpoch.totalSupply);
             userReward += userEpochReward;
             iEpoch.epochReward -= userEpochReward;
             iEpoch.totalSupply -= userSupply;
+            console.log("----- iEpoch.epochReward: %s", iEpoch.epochReward);
+            console.log("----- iEpoch.totalSupply: %s", iEpoch.totalSupply);
+            console.log("----- iEpoch.estimatedMP: %s", iEpoch.estimatedMP);
             //TODO: remove epoch when iEpoch.totalSupply reaches zero
         }
         account.epoch = userEpoch;
@@ -482,7 +509,7 @@ contract StakeManager is Ownable {
             account.bonusMP,
             account.totalMP
         );
-
+        console.log("------- _mintMP: mpToMint %s", mpToMint);
         //update storage
         account.lastMint = processTime;
         account.totalMP += mpToMint;
