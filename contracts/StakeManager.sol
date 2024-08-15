@@ -7,6 +7,28 @@ import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 
 import { StakeVault } from "./StakeVault.sol";
 
+
+contract StakeRewardEstimate is Ownable {
+    mapping(uint256 epochId => uint256 balance) public expiredMPPerEpoch;
+
+    function getExpiredMP(uint256 epochId) public view returns (uint256) {
+        return expiredMPPerEpoch[epochId];
+    }
+
+    function incrementExpiredMP(uint256 epochId, uint256 amount) public onlyOwner {
+        expiredMPPerEpoch[epochId] += amount;
+    }
+
+    function decrementExpiredMP(uint256 epochId, uint256 amount) public onlyOwner {
+        expiredMPPerEpoch[epochId] -= amount;
+    }
+
+    function deleteExpiredMP(uint256 epochId) public onlyOwner {
+        delete expiredMPPerEpoch[epochId];
+    }
+
+}
+
 contract StakeManager is Ownable {
     error StakeManager__SenderIsNotVault();
     error StakeManager__FundsLocked();
@@ -59,7 +81,8 @@ contract StakeManager is Ownable {
     uint256 public totalSupplyBalance;
     uint256 public totalMPPerEpoch;
 
-    mapping(uint256 epochId => uint256 balance) public expiredMPPerEpoch;
+    StakeRewardEstimate public stakeRewardEstimate;
+
     uint256 public currentEpochExpiredMP;
 
     StakeManager public migration;
@@ -119,9 +142,10 @@ contract StakeManager is Ownable {
     modifier finalizeEpoch() {
         if (block.timestamp >= epochEnd() && address(migration) == address(0)) {
             //mp estimation
-            if(expiredMPPerEpoch[currentEpoch] > 0){
-                totalMPPerEpoch -= expiredMPPerEpoch[currentEpoch];
-                delete expiredMPPerEpoch[currentEpoch];
+            uint256 expiredMP = stakeRewardEstimate.getExpiredMP(currentEpoch);
+            if(expiredMP > 0){
+                totalMPPerEpoch -= expiredMP;
+                stakeRewardEstimate.deleteExpiredMP(currentEpoch);
             }
             epochs[currentEpoch].estimatedMP = totalMPPerEpoch - currentEpochExpiredMP;
             delete currentEpochExpiredMP;
@@ -143,6 +167,11 @@ contract StakeManager is Ownable {
         epochs[0].startTime = block.timestamp;
         previousManager = StakeManager(_previousManager);
         stakedToken = ERC20(_stakedToken);
+        if(address(previousManager) != address(0)){
+            stakeRewardEstimate = previousManager.stakeRewardEstimate();
+        } else {
+            stakeRewardEstimate = new StakeRewardEstimate();
+        }
     }
 
     /**
@@ -196,8 +225,8 @@ contract StakeManager is Ownable {
         uint256 mpMaxBoostLimitEpoch = currentEpoch + mpMaxBoostLimitEpochCount;
         uint256 lastEpochAmountToMint = ((mpPerEpoch * (mpMaxBoostLimitEpochCount+1)) - maxMpToMint);
         
-        expiredMPPerEpoch[mpMaxBoostLimitEpoch] += lastEpochAmountToMint; // some staked amount from the past
-        expiredMPPerEpoch[mpMaxBoostLimitEpoch+1] += mpPerEpoch - lastEpochAmountToMint;
+        stakeRewardEstimate.incrementExpiredMP(mpMaxBoostLimitEpoch, lastEpochAmountToMint);
+        stakeRewardEstimate.incrementExpiredMP(mpMaxBoostLimitEpoch+1, mpPerEpoch - lastEpochAmountToMint);
         
         account.mpMaxBoostLimitEpoch = mpMaxBoostLimitEpoch;
         
@@ -234,7 +263,7 @@ contract StakeManager is Ownable {
 
         //mp estimation
         uint256 mpPerEpoch = _getMPToMint(account.balance, EPOCH_SIZE);
-        expiredMPPerEpoch[account.mpMaxBoostLimitEpoch] -= mpPerEpoch; // some staked amount from the past
+        stakeRewardEstimate.decrementExpiredMP(account.mpMaxBoostLimitEpoch, mpPerEpoch); // some staked amount from the past
         if(account.mpMaxBoostLimitEpoch < currentEpoch) {
             totalMPPerEpoch -= mpPerEpoch;
         }
@@ -323,7 +352,16 @@ contract StakeManager is Ownable {
         }
         migration = _migration;
         stakedToken.transfer(address(migration), epochReward());
-        migration.migrationInitialize(currentEpoch, totalSupplyMP, totalSupplyBalance, epochs[currentEpoch].startTime);
+        stakeRewardEstimate.transferOwnership(address(_migration));
+        migration.migrationInitialize(
+            currentEpoch,
+            totalSupplyMP,
+            totalSupplyBalance,
+            epochs[currentEpoch].startTime,
+            totalMPPerEpoch,
+            pendingMPToBeMinted,
+            currentEpochExpiredMP
+        );
     }
 
     /**
@@ -338,7 +376,10 @@ contract StakeManager is Ownable {
         uint256 _currentEpoch,
         uint256 _totalSupplyMP,
         uint256 _totalSupplyBalance,
-        uint256 _epochStartTime
+        uint256 _epochStartTime,
+        uint256 _totalMPPerEpoch,
+        uint256 _pendingMPToBeMinted,
+        uint256 _currentEpochExpiredMP
     )
         external
         onlyPreviousManager
@@ -353,6 +394,9 @@ contract StakeManager is Ownable {
         totalSupplyMP = _totalSupplyMP;
         totalSupplyBalance = _totalSupplyBalance;
         epochs[currentEpoch].startTime = _epochStartTime;
+        totalMPPerEpoch = _totalMPPerEpoch;
+        pendingMPToBeMinted = _pendingMPToBeMinted;
+        currentEpochExpiredMP = _currentEpochExpiredMP;
     }
 
     /**
