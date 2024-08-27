@@ -168,7 +168,9 @@ contract StakeManager is Ownable {
     /**
      * leaves the staking pool and withdraws all funds;
      */
-    function unstake(uint256 _amount)
+    function unstake(
+        uint256 _amount
+    )
         external
         onlyVault
         onlyAccountInitialized(msg.sender)
@@ -201,7 +203,9 @@ contract StakeManager is Ownable {
      *
      * @dev Reverts when resulting locked time is not in range of [MIN_LOCKUP_PERIOD, MAX_LOCKUP_PERIOD]
      */
-    function lock(uint256 _timeToIncrease)
+    function lock(
+        uint256 _timeToIncrease
+    )
         external
         onlyVault
         onlyAccountInitialized(msg.sender)
@@ -312,7 +316,9 @@ contract StakeManager is Ownable {
      * @notice Migrate account to new manager.
      * @param _acceptMigration true if wants to migrate, false if wants to leave
      */
-    function migrateTo(bool _acceptMigration)
+    function migrateTo(
+        bool _acceptMigration
+    )
         external
         onlyVault
         onlyAccountInitialized(msg.sender)
