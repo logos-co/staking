@@ -7,7 +7,6 @@ import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 
 import { StakeVault } from "./StakeVault.sol";
 
-
 contract StakeRewardEstimate is Ownable {
     mapping(uint256 epochId => uint256 balance) public expiredMPPerEpoch;
 
@@ -26,7 +25,6 @@ contract StakeRewardEstimate is Ownable {
     function deleteExpiredMP(uint256 epochId) public onlyOwner {
         delete expiredMPPerEpoch[epochId];
     }
-
 }
 
 contract StakeManager is Ownable {
@@ -143,7 +141,7 @@ contract StakeManager is Ownable {
         if (block.timestamp >= epochEnd() && address(migration) == address(0)) {
             //mp estimation
             uint256 expiredMP = stakeRewardEstimate.getExpiredMP(currentEpoch);
-            if(expiredMP > 0){
+            if (expiredMP > 0) {
                 totalMPPerEpoch -= expiredMP;
                 stakeRewardEstimate.deleteExpiredMP(currentEpoch);
             }
@@ -167,7 +165,7 @@ contract StakeManager is Ownable {
         epochs[0].startTime = block.timestamp;
         previousManager = StakeManager(_previousManager);
         stakedToken = ERC20(_stakedToken);
-        if(address(previousManager) != address(0)){
+        if (address(previousManager) != address(0)) {
             stakeRewardEstimate = previousManager.stakeRewardEstimate();
         } else {
             stakeRewardEstimate = new StakeRewardEstimate();
@@ -214,27 +212,26 @@ contract StakeManager is Ownable {
 
         //mp estimation
         uint256 mpPerEpoch = _getMPToMint(_amount, EPOCH_SIZE);
-        if(mpPerEpoch < 1){
+        if (mpPerEpoch < 1) {
             revert StakeManager__StakeIsTooLow();
         }
         uint256 thisEpochExpiredMP = mpPerEpoch - _getMPToMint(_amount, epochEnd() - block.timestamp);
-        currentEpochExpiredMP += thisEpochExpiredMP; 
+        currentEpochExpiredMP += thisEpochExpiredMP;
         totalMPPerEpoch += mpPerEpoch;
         uint256 maxMpToMint = _getMPToMint(_amount, MAX_BOOST * YEAR) + thisEpochExpiredMP;
         uint256 mpMaxBoostLimitEpochCount = (maxMpToMint) / mpPerEpoch;
         uint256 mpMaxBoostLimitEpoch = currentEpoch + mpMaxBoostLimitEpochCount;
-        uint256 lastEpochAmountToMint = ((mpPerEpoch * (mpMaxBoostLimitEpochCount+1)) - maxMpToMint);
-        
+        uint256 lastEpochAmountToMint = ((mpPerEpoch * (mpMaxBoostLimitEpochCount + 1)) - maxMpToMint);
+
         stakeRewardEstimate.incrementExpiredMP(mpMaxBoostLimitEpoch, lastEpochAmountToMint);
-        stakeRewardEstimate.incrementExpiredMP(mpMaxBoostLimitEpoch+1, mpPerEpoch - lastEpochAmountToMint);
-        
+        stakeRewardEstimate.incrementExpiredMP(mpMaxBoostLimitEpoch + 1, mpPerEpoch - lastEpochAmountToMint);
+
         account.mpMaxBoostLimitEpoch = mpMaxBoostLimitEpoch;
-        
+
         //update storage
         totalSupplyBalance += _amount;
         account.balance += _amount;
         account.lockUntil += _timeToIncrease;
-
     }
 
     /**
@@ -261,8 +258,9 @@ contract StakeManager is Ownable {
 
         //mp estimation
         uint256 mpPerEpoch = _getMPToMint(account.balance, EPOCH_SIZE);
-        stakeRewardEstimate.decrementExpiredMP(account.mpMaxBoostLimitEpoch, mpPerEpoch); // some staked amount from the past
-        if(account.mpMaxBoostLimitEpoch < currentEpoch) {
+        stakeRewardEstimate.decrementExpiredMP(account.mpMaxBoostLimitEpoch, mpPerEpoch); // some staked amount from the
+            // past
+        if (account.mpMaxBoostLimitEpoch < currentEpoch) {
             totalMPPerEpoch -= mpPerEpoch;
         }
 
@@ -535,7 +533,6 @@ contract StakeManager is Ownable {
         //mp estimation
         epoch.estimatedMP -= mpToMint;
         pendingMPToBeMinted -= mpToMint;
-
     }
 
     /**
@@ -583,6 +580,7 @@ contract StakeManager is Ownable {
      * @param _deltaTime time difference
      * @return multiplier points to mint
      */
+
     function calculateMPToMint(uint256 _balance, uint256 _deltaTime) public pure returns (uint256) {
         return _getMPToMint(_balance, _deltaTime);
     }
@@ -591,10 +589,10 @@ contract StakeManager is Ownable {
      * and the pending MPs that would be minted if all accounts were processed
      * @return _totalSupply current total supply
      */
+
     function totalSupply() public view returns (uint256 _totalSupply) {
         return totalSupplyMP + totalSupplyBalance + pendingMPToBeMinted;
     }
-
 
     /**
      * @notice Returns total of multiplier points and balance

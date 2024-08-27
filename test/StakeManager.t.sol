@@ -7,7 +7,7 @@ import { Test, console } from "forge-std/Test.sol";
 import { Deploy } from "../script/Deploy.s.sol";
 import { DeployMigrationStakeManager } from "../script/DeployMigrationStakeManager.s.sol";
 import { DeploymentConfig } from "../script/DeploymentConfig.s.sol";
-import { StakeManager } from "../contracts/StakeManager.sol";
+import { StakeManager, StakeRewardEstimate } from "../contracts/StakeManager.sol";
 import { StakeVault } from "../contracts/StakeVault.sol";
 import { VaultFactory } from "../contracts/VaultFactory.sol";
 
@@ -485,10 +485,15 @@ contract MigrationInitializeTest is StakeManagerTest {
         vm.startPrank(deployer);
         StakeManager secondStakeManager = new StakeManager(stakeToken, address(stakeManager));
         StakeManager thirdStakeManager = new StakeManager(stakeToken, address(secondStakeManager));
+        vm.stopPrank();
 
         // first, ensure `secondStakeManager` is in migration mode itself
+        StakeRewardEstimate db = stakeManager.stakeRewardEstimate();
+        vm.prank(address(stakeManager));
+        db.transferOwnership(address(secondStakeManager));
+
+        vm.prank(address(deployer));
         secondStakeManager.startMigration(thirdStakeManager);
-        vm.stopPrank();
 
         uint256 currentEpoch = stakeManager.currentEpoch();
         uint256 totalMP = stakeManager.totalSupplyMP();
@@ -498,7 +503,7 @@ contract MigrationInitializeTest is StakeManagerTest {
         // in migration itself, should revert
         vm.prank(address(stakeManager));
         vm.expectRevert(StakeManager.StakeManager__PendingMigration.selector);
-        secondStakeManager.migrationInitialize(currentEpoch, totalMP, totalBalance, 0);
+        secondStakeManager.migrationInitialize(currentEpoch, totalMP, totalBalance, 0, 0, 0, 0);
     }
 }
 
@@ -572,40 +577,40 @@ contract ExecuteAccountTest is StakeManagerTest {
     }
 
     function test_ShouldNotMintMoreThanCap() public {
-        uint256 stakeAmount = 10000000000;
-
+        uint256 stakeAmount = 10_000_000_000;
 
         // (MAX_BOOST * YEARS_IN_SECONDS)/EPOCH_SIZE_SECONDS
         // (4 * (604800*52))/604800
         //uint256 epochsAmountToReachCap = 208;
-        uint256 epochsAmountToReachCap = stakeManager.calculateMPToMint(stakeAmount, stakeManager.MAX_BOOST() * stakeManager.YEAR()) / stakeManager.calculateMPToMint(stakeAmount, stakeManager.EPOCH_SIZE());
+        uint256 epochsAmountToReachCap = stakeManager.calculateMPToMint(
+            stakeAmount, stakeManager.MAX_BOOST() * stakeManager.YEAR()
+        ) / stakeManager.calculateMPToMint(stakeAmount, stakeManager.EPOCH_SIZE());
 
         deal(stakeToken, testUser, stakeAmount);
-        
+
         userVaults.push(_createStakingAccount(makeAddr("testUser"), stakeAmount, 0));
 
-        vm.warp(stakeManager.epochEnd() - (stakeManager.EPOCH_SIZE()-1));
+        vm.warp(stakeManager.epochEnd() - (stakeManager.EPOCH_SIZE() - 1));
         userVaults.push(_createStakingAccount(makeAddr("testUser2"), stakeAmount, 0));
 
-        vm.warp(stakeManager.epochEnd() - (stakeManager.EPOCH_SIZE()-2));
+        vm.warp(stakeManager.epochEnd() - (stakeManager.EPOCH_SIZE() - 2));
         userVaults.push(_createStakingAccount(makeAddr("testUser3"), stakeAmount, 0));
 
-        vm.warp(stakeManager.epochEnd() - ((stakeManager.EPOCH_SIZE()/4)*3));
+        vm.warp(stakeManager.epochEnd() - ((stakeManager.EPOCH_SIZE() / 4) * 3));
         userVaults.push(_createStakingAccount(makeAddr("testUser4"), stakeAmount, 0));
 
-        vm.warp(stakeManager.epochEnd() - ((stakeManager.EPOCH_SIZE()/4)*2));
+        vm.warp(stakeManager.epochEnd() - ((stakeManager.EPOCH_SIZE() / 4) * 2));
         userVaults.push(_createStakingAccount(makeAddr("testUser5"), stakeAmount, 0));
 
-        vm.warp(stakeManager.epochEnd() - ((stakeManager.EPOCH_SIZE()/4)*1));
+        vm.warp(stakeManager.epochEnd() - ((stakeManager.EPOCH_SIZE() / 4) * 1));
         userVaults.push(_createStakingAccount(makeAddr("testUser6"), stakeAmount, 0));
-        
+
         vm.warp(stakeManager.epochEnd() - 2);
-        userVaults.push(_createStakingAccount(makeAddr("testUser7"), stakeAmount, 0));  
+        userVaults.push(_createStakingAccount(makeAddr("testUser7"), stakeAmount, 0));
 
         vm.warp(stakeManager.epochEnd() - 1);
         userVaults.push(_createStakingAccount(makeAddr("testUser8"), stakeAmount, 0));
-        
-        
+
         //userVaults.push(_createStakingAccount(makeAddr("testUser4"), stakeAmount, stakeManager.MAX_LOCKUP_PERIOD()));
         //userVaults.push(_createStakingAccount(makeAddr("testUser5"), stakeAmount, stakeManager.MIN_LOCKUP_PERIOD()));
 
@@ -661,7 +666,6 @@ contract ExecuteAccountTest is StakeManagerTest {
 }
 
 contract UserFlowsTest is StakeManagerTest {
-
     StakeVault[] private userVaults;
 
     function test_StakedSupplyShouldIncreaseAndDecreaseAgain() public {
@@ -712,11 +716,9 @@ contract UserFlowsTest is StakeManagerTest {
 
         for (uint256 i = 0; i <= accountNum; i++) {
             // deal(stakeToken, testUser, stakeAmount);
-            userVaults.push(_createStakingAccount(makeAddr(
-                string(abi.encode(keccak256(abi.encode(accountNum))))),
-                stakeAmount,
-                0
-            ));
+            userVaults.push(
+                _createStakingAccount(makeAddr(string(abi.encode(keccak256(abi.encode(accountNum))))), stakeAmount, 0)
+            );
         }
 
         uint256 epochsAmountToReachCap = 1;
@@ -738,7 +740,6 @@ contract UserFlowsTest is StakeManagerTest {
             assertEq(pendingMPToBeMintedAfter, 0);
         }
     }
-
 }
 
 contract MigrationStakeManagerTest is StakeManagerTest {
