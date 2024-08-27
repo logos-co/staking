@@ -175,11 +175,20 @@ contract StakeManager is Ownable {
     /**
      * Increases balance of msg.sender;
      * @param _amount Amount of balance to be decreased.
-     * @param _timeToIncrease Seconds to increase in locked time. If stake is unlocked, increases from block.timestamp.
+     * @param _timeToIncrease Seconds to increase in locked time. If stake is unlocked, increases from
+     * block.timestamp.
      *
      * @dev Reverts when resulting locked time is not in range of [MIN_LOCKUP_PERIOD, MAX_LOCKUP_PERIOD]
      */
-    function stake(uint256 _amount, uint256 _timeToIncrease) external onlyVault noPendingMigration finalizeEpoch {
+    function stake(
+        uint256 _amount,
+        uint256 _timeToIncrease
+    )
+        external
+        onlyVault
+        noPendingMigration
+        finalizeEpoch
+    {
         Account storage account = accounts[msg.sender];
         if (account.balance > 0) {
             revert StakeManager__AlreadyStaked();
@@ -258,7 +267,8 @@ contract StakeManager is Ownable {
 
         //mp estimation
         uint256 mpPerEpoch = _getMPToMint(account.balance, EPOCH_SIZE);
-        stakeRewardEstimate.decrementExpiredMP(account.mpMaxBoostLimitEpoch, mpPerEpoch); // some staked amount from the
+        stakeRewardEstimate.decrementExpiredMP(account.mpMaxBoostLimitEpoch, mpPerEpoch); // some staked
+            // amount from the
             // past
         if (account.mpMaxBoostLimitEpoch < currentEpoch) {
             totalMPPerEpoch -= mpPerEpoch;
@@ -274,7 +284,8 @@ contract StakeManager is Ownable {
 
     /**
      * @notice Locks entire balance for more amount of time.
-     * @param _timeToIncrease Seconds to increase in locked time. If stake is unlocked, increases from block.timestamp.
+     * @param _timeToIncrease Seconds to increase in locked time. If stake is unlocked, increases from
+     * block.timestamp.
      *
      * @dev Reverts when resulting locked time is not in range of [MIN_LOCKUP_PERIOD, MAX_LOCKUP_PERIOD]
      */
@@ -428,7 +439,14 @@ contract StakeManager is Ownable {
      * @param _account Account data
      * @param _acceptMigration If account should be stored or its MP/balance supply reduced
      */
-    function migrateFrom(address _vault, bool _acceptMigration, Account memory _account) external onlyPreviousManager {
+    function migrateFrom(
+        address _vault,
+        bool _acceptMigration,
+        Account memory _account
+    )
+        external
+        onlyPreviousManager
+    {
         if (_acceptMigration) {
             accounts[_vault] = _account;
         } else {

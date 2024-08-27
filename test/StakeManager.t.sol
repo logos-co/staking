@@ -545,8 +545,15 @@ contract ExecuteAccountTest is StakeManagerTest {
             console.log("# PND_REWARDS", stakeManager.pendingReward());
 
             for (uint256 j = 0; j < userVaults.length; j++) {
-                (address rewardAddress,,, uint256 totalMPBefore, uint256 lastMintBefore,, uint256 epochBefore,) =
-                    stakeManager.accounts(address(userVaults[j]));
+                (
+                    address rewardAddress,
+                    ,
+                    ,
+                    uint256 totalMPBefore,
+                    uint256 lastMintBefore,
+                    ,
+                    uint256 epochBefore,
+                ) = stakeManager.accounts(address(userVaults[j]));
                 uint256 rewardsBefore = ERC20(stakeToken).balanceOf(rewardAddress);
                 console.log("-Vault number", j);
                 console.log("--=====BEFORE=====");
@@ -613,16 +620,25 @@ contract ExecuteAccountTest is StakeManagerTest {
         vm.warp(stakeManager.epochEnd() - 1);
         userVaults.push(_createStakingAccount(makeAddr("testUser8"), stakeAmount, 0));
 
-        //userVaults.push(_createStakingAccount(makeAddr("testUser4"), stakeAmount, stakeManager.MAX_LOCKUP_PERIOD()));
-        //userVaults.push(_createStakingAccount(makeAddr("testUser5"), stakeAmount, stakeManager.MIN_LOCKUP_PERIOD()));
+        //userVaults.push(_createStakingAccount(makeAddr("testUser4"), stakeAmount,
+        // stakeManager.MAX_LOCKUP_PERIOD()));
+        //userVaults.push(_createStakingAccount(makeAddr("testUser5"), stakeAmount,
+        // stakeManager.MIN_LOCKUP_PERIOD()));
 
         for (uint256 i = 0; i <= epochsAmountToReachCap; i++) {
             deal(stakeToken, address(stakeManager), 100 ether);
             vm.warp(stakeManager.epochEnd());
             stakeManager.executeEpoch();
             for (uint256 j = 0; j < userVaults.length; j++) {
-                (address rewardAddress,,, uint256 totalMPBefore, uint256 lastMintBefore,, uint256 epochBefore,) =
-                    stakeManager.accounts(address(userVaults[j]));
+                (
+                    address rewardAddress,
+                    ,
+                    ,
+                    uint256 totalMPBefore,
+                    uint256 lastMintBefore,
+                    ,
+                    uint256 epochBefore,
+                ) = stakeManager.accounts(address(userVaults[j]));
                 uint256 rewardsBefore = ERC20(stakeToken).balanceOf(rewardAddress);
 
                 stakeManager.executeAccount(address(userVaults[j]), epochBefore + 1);
@@ -644,8 +660,15 @@ contract ExecuteAccountTest is StakeManagerTest {
             vm.warp(stakeManager.epochEnd());
             stakeManager.executeEpoch();
             for (uint256 j = 0; j < userVaults.length; j++) {
-                (address rewardAddress,,, uint256 totalMPBefore, uint256 lastMintBefore,, uint256 epochBefore,) =
-                    stakeManager.accounts(address(userVaults[j]));
+                (
+                    address rewardAddress,
+                    ,
+                    ,
+                    uint256 totalMPBefore,
+                    uint256 lastMintBefore,
+                    ,
+                    uint256 epochBefore,
+                ) = stakeManager.accounts(address(userVaults[j]));
                 uint256 rewardsBefore = ERC20(stakeToken).balanceOf(rewardAddress);
 
                 stakeManager.executeAccount(address(userVaults[j]), epochBefore + 1);
@@ -721,7 +744,9 @@ contract UserFlowsTest is StakeManagerTest {
         for (uint256 i = 0; i <= accountNum; i++) {
             // deal(stakeToken, testUser, stakeAmount);
             userVaults.push(
-                _createStakingAccount(makeAddr(string(abi.encode(keccak256(abi.encode(accountNum))))), stakeAmount, 0)
+                _createStakingAccount(
+                    makeAddr(string(abi.encode(keccak256(abi.encode(accountNum))))), stakeAmount, 0
+                )
             );
         }
 
@@ -733,8 +758,15 @@ contract UserFlowsTest is StakeManagerTest {
             uint256 pendingMPToBeMintedBefore = stakeManager.pendingMPToBeMinted();
             uint256 totalSupplyMP = stakeManager.totalSupplyMP();
             for (uint256 j = 0; j < userVaults.length; j++) {
-                (address rewardAddress,,, uint256 totalMPBefore, uint256 lastMintBefore,, uint256 epochBefore,) =
-                    stakeManager.accounts(address(userVaults[j]));
+                (
+                    address rewardAddress,
+                    ,
+                    ,
+                    uint256 totalMPBefore,
+                    uint256 lastMintBefore,
+                    ,
+                    uint256 epochBefore,
+                ) = stakeManager.accounts(address(userVaults[j]));
 
                 stakeManager.executeAccount(address(userVaults[j]), epochBefore + 1);
             }
@@ -751,7 +783,8 @@ contract MigrationStakeManagerTest is StakeManagerTest {
 
     function setUp() public virtual override {
         super.setUp();
-        DeployMigrationStakeManager deployment = new DeployMigrationStakeManager(address(stakeManager), stakeToken);
+        DeployMigrationStakeManager deployment =
+            new DeployMigrationStakeManager(address(stakeManager), stakeToken);
         newStakeManager = deployment.run();
     }
 
