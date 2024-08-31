@@ -174,15 +174,16 @@ contract StakeManager is Ownable {
 
     /**
      * Increases balance of msg.sender;
-     * @param _amount Amount of balance to be decreased.
-     * @param _timeToIncrease Seconds to increase in locked time. If stake is unlocked, increases from
-     * block.timestamp.
+     * @param _amount Amount of balance being staked.
+     * @param _secondsToLock Seconds of lockup time. 0 means no lockup.
      *
      * @dev Reverts when resulting locked time is not in range of [MIN_LOCKUP_PERIOD, MAX_LOCKUP_PERIOD]
+     * @dev Reverts when account has already staked funds.
+     * @dev Reverts when amount staked results in less than 1 MP per epoch.
      */
     function stake(
         uint256 _amount,
-        uint256 _timeToIncrease
+        uint256 _secondsToLock
     )
         external
         onlyVault
@@ -190,34 +191,13 @@ contract StakeManager is Ownable {
         finalizeEpoch
     {
         Account storage account = accounts[msg.sender];
-        if (account.balance > 0) {
+        if (account.balance > 0 || account.lockUntil != 0) {
             revert StakeManager__AlreadyStaked();
         }
-
-        if (account.lockUntil == 0) {
-            // account not initialized
-            account.lockUntil = block.timestamp;
-            account.epoch = currentEpoch; //starts in current epoch
-            account.rewardAddress = StakeVault(msg.sender).owner();
-        } else {
-            _processAccount(account, currentEpoch);
+        if (_secondsToLock != 0 && (_secondsToLock < MIN_LOCKUP_PERIOD || _secondsToLock > MAX_LOCKUP_PERIOD))
+        {
+            revert StakeManager__InvalidLockTime();
         }
-
-        uint256 deltaTime = 0;
-
-        if (_timeToIncrease > 0) {
-            uint256 lockUntil = account.lockUntil + _timeToIncrease;
-            if (lockUntil < block.timestamp) {
-                revert StakeManager__InvalidLockTime();
-            }
-
-            deltaTime = lockUntil - block.timestamp;
-            if (deltaTime < MIN_LOCKUP_PERIOD || deltaTime > MAX_LOCKUP_PERIOD) {
-                revert StakeManager__InvalidLockTime();
-            }
-        }
-
-        _mintBonusMP(account, deltaTime, _amount);
 
         //mp estimation
         uint256 mpPerEpoch = _getMPToMint(_amount, EPOCH_SIZE);
@@ -225,22 +205,25 @@ contract StakeManager is Ownable {
             revert StakeManager__StakeIsTooLow();
         }
         uint256 thisEpochExpiredMP = mpPerEpoch - _getMPToMint(_amount, epochEnd() - block.timestamp);
-        currentEpochExpiredMP += thisEpochExpiredMP;
-        totalMPPerEpoch += mpPerEpoch;
         uint256 maxMpToMint = _getMPToMint(_amount, MAX_BOOST * YEAR) + thisEpochExpiredMP;
         uint256 mpMaxBoostLimitEpochCount = (maxMpToMint) / mpPerEpoch;
         uint256 mpMaxBoostLimitEpoch = currentEpoch + mpMaxBoostLimitEpochCount;
         uint256 lastEpochAmountToMint = ((mpPerEpoch * (mpMaxBoostLimitEpochCount + 1)) - maxMpToMint);
 
+        // account initialization
+        account.lockUntil = block.timestamp + _secondsToLock;
+        account.epoch = currentEpoch; //starts in current epoch
+        account.rewardAddress = StakeVault(msg.sender).owner();
+        account.balance = _amount;
+        account.mpMaxBoostLimitEpoch = mpMaxBoostLimitEpoch;
+        _mintBonusMP(account, _secondsToLock, _amount);
+
+        //update global storage
+        totalSupplyBalance += _amount;
+        currentEpochExpiredMP += thisEpochExpiredMP;
+        totalMPPerEpoch += mpPerEpoch;
         stakeRewardEstimate.incrementExpiredMP(mpMaxBoostLimitEpoch, lastEpochAmountToMint);
         stakeRewardEstimate.incrementExpiredMP(mpMaxBoostLimitEpoch + 1, mpPerEpoch - lastEpochAmountToMint);
-
-        account.mpMaxBoostLimitEpoch = mpMaxBoostLimitEpoch;
-
-        //update storage
-        totalSupplyBalance += _amount;
-        account.balance += _amount;
-        account.lockUntil += _timeToIncrease;
     }
 
     /**
@@ -286,13 +269,13 @@ contract StakeManager is Ownable {
 
     /**
      * @notice Locks entire balance for more amount of time.
-     * @param _timeToIncrease Seconds to increase in locked time. If stake is unlocked, increases from
+     * @param _secondsToIncreaseLock Seconds to increase in locked time. If stake is unlocked, increases from
      * block.timestamp.
      *
      * @dev Reverts when resulting locked time is not in range of [MIN_LOCKUP_PERIOD, MAX_LOCKUP_PERIOD]
      */
     function lock(
-        uint256 _timeToIncrease
+        uint256 _secondsToIncreaseLock
     )
         external
         onlyVault
@@ -305,16 +288,16 @@ contract StakeManager is Ownable {
         uint256 lockUntil = account.lockUntil;
         uint256 deltaTime;
         if (lockUntil < block.timestamp) {
-            lockUntil = block.timestamp + _timeToIncrease;
-            deltaTime = _timeToIncrease;
+            lockUntil = block.timestamp + _secondsToIncreaseLock;
+            deltaTime = _secondsToIncreaseLock;
         } else {
-            lockUntil += _timeToIncrease;
+            lockUntil += _secondsToIncreaseLock;
             deltaTime = lockUntil - block.timestamp;
         }
         if (deltaTime < MIN_LOCKUP_PERIOD || deltaTime > MAX_LOCKUP_PERIOD) {
             revert StakeManager__InvalidLockTime();
         }
-        _mintBonusMP(account, _timeToIncrease, 0);
+        _mintBonusMP(account, _secondsToIncreaseLock, 0);
         //update account storage
         account.lockUntil = lockUntil;
     }
