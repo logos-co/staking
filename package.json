@@ -30,6 +30,7 @@
     "verify:stake_manager": "certoraRun certora/confs/StakeManager.conf",
     "verify:stake_manager_start_migration": "certoraRun certora/confs/StakeManagerStartMigration.conf",
     "verify:stake_manager_process": "certoraRun certora/confs/StakeManagerProcess.conf",
-    "release": "commit-and-tag-version"
+    "release": "commit-and-tag-version",
+    "adorno": "pnpm prettier:write && forge fmt && forge snapshot && pnpm gas-report"
   }
 }
