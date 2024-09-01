@@ -260,11 +260,17 @@ contract StakeManager is Ownable {
         }
 
         //update storage
-        account.balance -= _amount;
-        account.bonusMP -= reducedInitialMP;
-        account.totalMP -= reducedMP;
+        if(account.balance == _amount){
+            delete accounts[msg.sender];
+        } else {
+            account.balance -= _amount;
+            account.bonusMP -= reducedInitialMP;
+            account.totalMP -= reducedMP;
+        }
         totalSupplyBalance -= _amount;
         totalSupplyMP -= reducedMP;
+
+        
     }
 
     /**
@@ -407,11 +413,13 @@ contract StakeManager is Ownable {
     )
         external
         onlyVault
-        onlyAccountInitialized(msg.sender)
         onlyPendingMigration
         finalizeEpoch
         returns (StakeManager newManager)
     {
+        if(accounts[msg.sender].balance == 0) {
+            return migration;
+        }
         _processAccount(accounts[msg.sender], currentEpoch);
         Account memory account = accounts[msg.sender];
         totalSupplyMP -= account.totalMP;
@@ -623,5 +631,22 @@ contract StakeManager is Ownable {
      */
     function epochEnd() public view returns (uint256 _epochEnd) {
         return epochs[currentEpoch].startTime + EPOCH_SIZE;
+    }
+
+    function balanceOf(address _account) public view returns (uint256) {
+        Account account = accounts[_account];
+        return account.balance + account.totalMP;
+    }
+
+    function accountAssets(address _account) public view returns (uint256) {
+        return accounts[_account].balance;
+    }   
+
+    function totalAssets() public view returns (uint256) {
+        return totalSupplyBalance;
+    }
+
+    function assetsLockedUntil(address _account) public view returns (uint256) {
+        return accounts[_account].lockUntil;
     }
 }

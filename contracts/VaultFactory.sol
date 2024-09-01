@@ -61,4 +61,10 @@ contract VaultFactory is Ownable2Step {
         emit VaultCreated(address(vault), msg.sender);
         return vault;
     }
+
+    function createVault(address _owner, address _stakeManager, address _vaultManager) external returns (StakeVault) {
+        StakeVault vault = new StakeVault(_owner, stakeManager.stakedToken(), stakeManager);
+        emit VaultCreated(address(vault), _owner);
+        return vault;
+    }
 }
