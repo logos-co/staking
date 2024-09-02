@@ -5,29 +5,9 @@ import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 
+import { StakeRewardEstimate } from "./StakeRewardEstimate.sol";
 import { StakeVault } from "./StakeVault.sol";
 
-
-contract StakeRewardEstimate is Ownable {
-    mapping(uint256 epochId => uint256 balance) public expiredMPPerEpoch;
-
-    function getExpiredMP(uint256 epochId) public view returns (uint256) {
-        return expiredMPPerEpoch[epochId];
-    }
-
-    function incrementExpiredMP(uint256 epochId, uint256 amount) public onlyOwner {
-        expiredMPPerEpoch[epochId] += amount;
-    }
-
-    function decrementExpiredMP(uint256 epochId, uint256 amount) public onlyOwner {
-        expiredMPPerEpoch[epochId] -= amount;
-    }
-
-    function deleteExpiredMP(uint256 epochId) public onlyOwner {
-        delete expiredMPPerEpoch[epochId];
-    }
-
-}
 
 contract StakeManager is Ownable {
     error StakeManager__SenderIsNotVault();
@@ -218,18 +198,18 @@ contract StakeManager is Ownable {
             revert StakeManager__StakeIsTooLow();
         }
         uint256 thisEpochExpiredMP = mpPerEpoch - _getMPToMint(_amount, epochEnd() - block.timestamp);
-        currentEpochExpiredMP += thisEpochExpiredMP; 
+        currentEpochExpiredMP += thisEpochExpiredMP;
         totalMPPerEpoch += mpPerEpoch;
         uint256 maxMpToMint = _getMPToMint(_amount, MAX_BOOST * YEAR) + thisEpochExpiredMP;
         uint256 mpMaxBoostLimitEpochCount = (maxMpToMint) / mpPerEpoch;
         uint256 mpMaxBoostLimitEpoch = currentEpoch + mpMaxBoostLimitEpochCount;
         uint256 lastEpochAmountToMint = ((mpPerEpoch * (mpMaxBoostLimitEpochCount+1)) - maxMpToMint);
-        
+
         stakeRewardEstimate.incrementExpiredMP(mpMaxBoostLimitEpoch, lastEpochAmountToMint);
         stakeRewardEstimate.incrementExpiredMP(mpMaxBoostLimitEpoch+1, mpPerEpoch - lastEpochAmountToMint);
-        
+
         account.mpMaxBoostLimitEpoch = mpMaxBoostLimitEpoch;
-        
+
         //update storage
         totalSupplyBalance += _amount;
         account.balance += _amount;

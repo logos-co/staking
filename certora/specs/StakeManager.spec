@@ -1,4 +1,5 @@
 using ERC20A as staked;
+
 methods {
   function staked.balanceOf(address) external returns (uint256) envfree;
   function totalSupplyBalance() external returns (uint256) envfree;
@@ -6,9 +7,10 @@ methods {
   function previousManager() external returns (address) envfree;
   function _.migrateFrom(address, bool, StakeManager.Account) external => NONDET;
   function _.increaseTotalMP(uint256) external => NONDET;
-  function _.migrationInitialize(uint256,uint256,uint256,uint256) external => NONDET;
+  function _.migrationInitialize(uint256,uint256,uint256,uint256,uint256,uint256,uint256) external => NONDET;
   function accounts(address) external returns(address, uint256, uint256, uint256, uint256, uint256, uint256, uint256) envfree;
   function Math.mulDiv(uint256 a, uint256 b, uint256 c) internal returns uint256 => mulDivSummary(a,b,c);
+  function _._ external => DISPATCH [] default NONDET;
 }
 
 function mulDivSummary(uint256 a, uint256 b, uint256 c) returns uint256 {
@@ -59,7 +61,7 @@ function simplification(env e) {
 }
 
 definition requiresPreviousManager(method f) returns bool = (
-  f.selector == sig:migrationInitialize(uint256,uint256,uint256,uint256).selector ||
+  f.selector == sig:migrationInitialize(uint256,uint256,uint256,uint256,uint256,uint256,uint256).selector ||
   f.selector == sig:migrateFrom(address,bool,StakeManager.Account).selector ||
   f.selector == sig:increaseTotalMP(uint256).selector
   );

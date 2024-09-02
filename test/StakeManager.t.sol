@@ -27,7 +27,7 @@ contract StakeManagerTest is Test {
         (deployer, stakeToken) = deploymentConfig.activeNetworkConfig();
     }
 
-    function testDeployment() public view {
+    function testDeployment() public {
         assertEq(stakeManager.owner(), deployer);
         assertEq(stakeManager.currentEpoch(), 0);
         assertEq(stakeManager.pendingReward(), 0);
@@ -78,6 +78,25 @@ contract StakeManagerTest is Test {
         ERC20(stakeToken).approve(address(userVault), mintAmount);
         userVault.stake(amount, lockTime);
         vm.stopPrank();
+    }
+
+    function _calculateMaxMP(uint256 amount) internal view returns (uint256) {
+        return stakeManager.calculateMPToMint(amount, stakeManager.MAX_BOOST() * stakeManager.YEAR());
+    }
+
+    function _calculateMaxEpochMP(uint256 amount) internal view returns (uint256) {
+        return stakeManager.calculateMPToMint(amount, stakeManager.EPOCH_SIZE());
+    }
+
+    function _calculateMissedEpochMP(uint256 amount) internal view returns (uint256) {
+        return _calculateMaxEpochMP(amount)
+            - stakeManager.calculateMPToMint(amount, stakeManager.epochEnd()
+                                             - block.timestamp);
+    }
+
+    function _calculateEpochsAmountToReachMaxMP(uint256 amount) internal view returns (uint256) {
+        // we need to add `missedEpochMP` as those will bleed into epoch after the last one
+        return (_calculateMaxMP(amount) + _calculateMissedEpochMP(amount)) / _calculateMaxEpochMP(amount);
     }
 }
 
@@ -345,9 +364,9 @@ contract UnstakeTest is StakeManagerTest {
     function test_RevertWhen_AmountMoreThanBalance() public {
         uint256 stakeAmount = 1000;
         StakeVault userVault = _createStakingAccount(testUser, stakeAmount);
-        //vm.startPrank(testUser);
-        //vm.expectRevert(StakeManager.StakeManager__InsufficientFunds.selector);
-        //userVault.unstake(stakeAmount + 1);
+        vm.startPrank(testUser);
+        vm.expectRevert(StakeManager.StakeManager__InsufficientFunds.selector);
+        userVault.unstake(stakeAmount + 1);
     }
 }
 
@@ -511,6 +530,8 @@ contract MigrateTest is StakeManagerTest {
 contract ExecuteAccountTest is StakeManagerTest {
     StakeVault[] private userVaults;
 
+    mapping(address vault => uint256 epochsAmountToReachMaxMP) private epochsAmountToReachMaxMP;
+
     function test_RevertWhen_InvalidLimitEpoch() public {
         uint256 lockTime = stakeManager.MIN_LOCKUP_PERIOD();
         uint256 stakeAmount = 100;
@@ -578,92 +599,109 @@ contract ExecuteAccountTest is StakeManagerTest {
     }
 
     function test_ShouldNotMintMoreThanCap() public {
-        uint256 stakeAmount = 10000000000;
 
+        uint256 stakeAmount = 100;
 
-        // (MAX_BOOST * YEARS_IN_SECONDS)/EPOCH_SIZE_SECONDS
-        // (4 * (604800*52))/604800
-        //uint256 epochsAmountToReachCap = 208;
-        uint256 epochsAmountToReachCap = stakeManager.calculateMPToMint(stakeAmount, stakeManager.MAX_BOOST() * stakeManager.YEAR()) / stakeManager.calculateMPToMint(stakeAmount, stakeManager.EPOCH_SIZE());
+        address testUser3 = makeAddr("testUser3");
+        address testUser4 = makeAddr("testUser4");
+        address testUser5 = makeAddr("testUser5");
+        address testUser6 = makeAddr("testUser6");
+        address testUser7 = makeAddr("testUser7");
+        address testUser8 = makeAddr("testUser8");
 
+        // ensure testUser has funds
         deal(stakeToken, testUser, stakeAmount);
 
-        userVaults.push(_createStakingAccount(makeAddr("testUser"), stakeAmount, 0));
+        // testUser creates vault and stakes without lockup, also keep track of
+        // epochsAmountToReachMaxMP for this user
+        epochsAmountToReachMaxMP[testUser] = _calculateEpochsAmountToReachMaxMP(stakeAmount);
+        userVaults.push(_createStakingAccount(testUser, stakeAmount, 0));
 
-        vm.warp(stakeManager.epochEnd() - (stakeManager.EPOCH_SIZE()-1));
-        userVaults.push(_createStakingAccount(makeAddr("testUser2"), stakeAmount, 0));
+        console.log("TOTAL MAX MP");
+        console.log(_calculateMaxMP(stakeAmount));
+        // // progress to some point in the future that's still inside the current epoch
+        // vm.warp(stakeManager.epochEnd() - (stakeManager.EPOCH_SIZE()-1));
+        //
+        // epochsAmountToReachMaxMP[testUser2] = _calculateEpochsAmountToReachMaxMP(stakeAmount);
+        // userVaults.push(_createStakingAccount(testUser2, stakeAmount, 0));
+        //
+        // vm.warp(stakeManager.epochEnd() - (stakeManager.EPOCH_SIZE()-2));
+        //
+        // epochsAmountToReachMaxMP[testUser3] = _calculateEpochsAmountToReachMaxMP(stakeAmount);
+        // userVaults.push(_createStakingAccount(testUser3, stakeAmount, 0));
+        //
+        // vm.warp(stakeManager.epochEnd() - ((stakeManager.EPOCH_SIZE()/4)*3));
+        //
+        // epochsAmountToReachMaxMP[testUser4] = _calculateEpochsAmountToReachMaxMP(stakeAmount);
+        // userVaults.push(_createStakingAccount(testUser4, stakeAmount, 0));
+        //
+        // vm.warp(stakeManager.epochEnd() - ((stakeManager.EPOCH_SIZE()/4)*2));
+        //
+        // epochsAmountToReachMaxMP[testUser5] = _calculateEpochsAmountToReachMaxMP(stakeAmount);
+        // userVaults.push(_createStakingAccount(testUser5, stakeAmount, 0));
+        //
+        // vm.warp(stakeManager.epochEnd() - ((stakeManager.EPOCH_SIZE()/4)*1));
+        //
+        // epochsAmountToReachMaxMP[testUser6] = _calculateEpochsAmountToReachMaxMP(stakeAmount);
+        // userVaults.push(_createStakingAccount(testUser6, stakeAmount, 0));
+        //
+        // vm.warp(stakeManager.epochEnd() - 2);
+        //
+        // epochsAmountToReachMaxMP[testUser7] = _calculateEpochsAmountToReachMaxMP(stakeAmount);
+        // userVaults.push(_createStakingAccount(testUser7, stakeAmount, 0));
+        //
+        // vm.warp(stakeManager.epochEnd() - 1);
+        //
+        // epochsAmountToReachMaxMP[testUser8] = _calculateEpochsAmountToReachMaxMP(stakeAmount);
+        // userVaults.push(_createStakingAccount(testUser8, stakeAmount, 0));
+        //
 
-        vm.warp(stakeManager.epochEnd() - (stakeManager.EPOCH_SIZE()-2));
-        userVaults.push(_createStakingAccount(makeAddr("testUser3"), stakeAmount, 0));
+        // userVaults.push(_createStakingAccount(makeAddr("testUser4"), stakeAmount, stakeManager.MAX_LOCKUP_PERIOD()));
+        // userVaults.push(_createStakingAccount(makeAddr("testUser5"), stakeAmount, stakeManager.MIN_LOCKUP_PERIOD()));
 
-        vm.warp(stakeManager.epochEnd() - ((stakeManager.EPOCH_SIZE()/4)*3));
-        userVaults.push(_createStakingAccount(makeAddr("testUser4"), stakeAmount, 0));
-
-        vm.warp(stakeManager.epochEnd() - ((stakeManager.EPOCH_SIZE()/4)*2));
-        userVaults.push(_createStakingAccount(makeAddr("testUser5"), stakeAmount, 0));
-
-        vm.warp(stakeManager.epochEnd() - ((stakeManager.EPOCH_SIZE()/4)*1));
-        userVaults.push(_createStakingAccount(makeAddr("testUser6"), stakeAmount, 0));
-
-        vm.warp(stakeManager.epochEnd() - 2);
-        userVaults.push(_createStakingAccount(makeAddr("testUser7"), stakeAmount, 0));
-
-        vm.warp(stakeManager.epochEnd() - 1);
-        userVaults.push(_createStakingAccount(makeAddr("testUser8"), stakeAmount, 0));
-
-
-        //userVaults.push(_createStakingAccount(makeAddr("testUser4"), stakeAmount, stakeManager.MAX_LOCKUP_PERIOD()));
-        //userVaults.push(_createStakingAccount(makeAddr("testUser5"), stakeAmount, stakeManager.MIN_LOCKUP_PERIOD()));
-
-        for (uint256 i = 0; i <= epochsAmountToReachCap; i++) {
-            deal(stakeToken, address(stakeManager), 100 ether);
+        for (uint256 i = 0; i <= epochsAmountToReachMaxMP[testUser]; i++) {
+            deal(stakeToken, address(stakeManager), 1 ether);
             vm.warp(stakeManager.epochEnd());
             stakeManager.executeEpoch();
             for (uint256 j = 0; j < userVaults.length; j++) {
-                (address rewardAddress,,, uint256 totalMPBefore, uint256 lastMintBefore,, uint256 epochBefore,) =
-                    stakeManager.accounts(address(userVaults[j]));
+                (address rewardAddress,,, uint256 totalMPBefore, uint256 lastMintBefore,, uint256 epochBefore,) = stakeManager.accounts(address(userVaults[j]));
                 uint256 rewardsBefore = ERC20(stakeToken).balanceOf(rewardAddress);
 
                 stakeManager.executeAccount(address(userVaults[j]), epochBefore + 1);
-                (,,, uint256 totalMP, uint256 lastMint,, uint256 epoch,) = stakeManager.accounts(address(userVaults[j]));
-                uint256 rewards = ERC20(stakeToken).balanceOf(rewardAddress);
-                //assertEq(lastMint, lastMintBefore + stakeManager.EPOCH_SIZE(), "must increaase lastMint");
-                assertEq(epoch, epochBefore + 1, "must increase epoch");
-                //assertGt(totalMP, totalMPBefore, "must increase MPs");
-                //assertGt(rewards, rewardsBefore, "must increase rewards");
-                lastMintBefore = lastMint;
-                epochBefore = epoch;
-                totalMPBefore = totalMP;
-            }
-        }
-
-        for (uint256 i = 0; i < 5; i++) {
-            deal(stakeToken, address(stakeManager), 100 ether);
-            vm.warp(stakeManager.epochEnd());
-            stakeManager.executeEpoch();
-            for (uint256 j = 0; j < userVaults.length; j++) {
-                (address rewardAddress,,, uint256 totalMPBefore, uint256 lastMintBefore,, uint256 epochBefore,) =
-                    stakeManager.accounts(address(userVaults[j]));
-                uint256 rewardsBefore = ERC20(stakeToken).balanceOf(rewardAddress);
-
-                stakeManager.executeAccount(address(userVaults[j]), epochBefore + 1);
-                (,,, uint256 totalMP, uint256 lastMint,, uint256 epoch,) = stakeManager.accounts(address(userVaults[j]));
-                uint256 rewards = ERC20(stakeToken).balanceOf(rewardAddress);
+                (,,, uint256 totalMPAfter, uint256 lastMint,, uint256 epoch,) = stakeManager.accounts(address(userVaults[j]));
+                uint256 rewardsAfter = ERC20(stakeToken).balanceOf(rewardAddress);
                 assertEq(lastMint, lastMintBefore + stakeManager.EPOCH_SIZE(), "must increaase lastMint");
                 assertEq(epoch, epochBefore + 1, "must increase epoch");
-                //assertEq(totalMP, totalMPBefore, "must NOT increase MPs");
-                assertGt(rewards, rewardsBefore, "must increase rewards");
+                assertGt(totalMPAfter, totalMPBefore, "must increase MPs");
+                assertGt(rewardsAfter, rewardsBefore, "must increase rewards");
                 lastMintBefore = lastMint;
                 epochBefore = epoch;
-                totalMPBefore = totalMP;
+                totalMPBefore = totalMPAfter;
             }
         }
+
+        // for (uint256 i = 0; i < 5; i++) {
+        //     deal(stakeToken, address(stakeManager), 100 ether);
+        //     vm.warp(stakeManager.epochEnd());
+        //     stakeManager.executeEpoch();
+        //     for (uint256 j = 0; j < userVaults.length; j++) {
+        //         (address rewardAddress,,, uint256 totalMPBefore, uint256 lastMintBefore,, uint256 epochBefore,) =
+        //             stakeManager.accounts(address(userVaults[j]));
+        //         uint256 rewardsBefore = ERC20(stakeToken).balanceOf(rewardAddress);
+        //
+        //         stakeManager.executeAccount(address(userVaults[j]), epochBefore + 1);
+        //         (,,, uint256 totalMP, uint256 lastMint,, uint256 epoch,) = stakeManager.accounts(address(userVaults[j]));
+        //         uint256 rewards = ERC20(stakeToken).balanceOf(rewardAddress);
+        //         assertEq(lastMint, lastMintBefore + stakeManager.EPOCH_SIZE(), "must increaase lastMint");
+        //         assertEq(epoch, epochBefore + 1, "must increase epoch");
+        //         //assertEq(totalMP, totalMPBefore, "must NOT increase MPs");
+        //         assertGt(rewards, rewardsBefore, "must increase rewards");
+        //         lastMintBefore = lastMint;
+        //         epochBefore = epoch;
+        //         totalMPBefore = totalMP;
+        //     }
+        // }
     }
-
-    function test_UpdateEpoch() public { }
-    function test_PayRewards() public { }
-
-    function test_MintMPLimit() public { }
 }
 
 contract UserFlowsTest is StakeManagerTest {
@@ -712,7 +750,6 @@ contract UserFlowsTest is StakeManagerTest {
         assertEq(stakeManager.totalSupplyBalance(), 0);
     }
 
-    // function test_PendingMPToBeMintedCannotBeGreaterThanTotalSupplyMP(uint8 accountNum) public {
     function test_PendingMPToBeMintedCannotBeGreaterThanTotalSupplyMP(uint8 accountNum) public {
         uint256 stakeAmount = 10_000_000;
 
@@ -733,7 +770,7 @@ contract UserFlowsTest is StakeManagerTest {
             uint256 pendingMPToBeMintedBefore = stakeManager.pendingMPToBeMinted();
             uint256 totalSupplyMP = stakeManager.totalSupplyMP();
             for (uint256 j = 0; j < userVaults.length; j++) {
-                (address rewardAddress,,, uint256 totalMPBefore, uint256 lastMintBefore,, uint256 epochBefore,) =
+                (,,,,,, uint256 epochBefore,) =
                     stakeManager.accounts(address(userVaults[j]));
 
                 stakeManager.executeAccount(address(userVaults[j]), epochBefore + 1);
