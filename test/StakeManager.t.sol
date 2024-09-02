@@ -76,7 +76,14 @@ contract StakeManagerTest is Test {
         userVault = _createTestVault(owner);
         vm.startPrank(owner);
         ERC20(stakeToken).approve(address(userVault), mintAmount);
-        userVault.stake(amount, lockTime);
+
+        if (lockTime > 0) {
+            userVault.depositAndStake(amount, lockTime);
+        } else {
+            userVault.deposit(amount);
+            vm.warp(userVault.depositCooldownUntil() + 1);
+            userVault.stake(amount, lockTime);
+        }
         vm.stopPrank();
     }
 }
@@ -97,11 +104,11 @@ contract StakeTest is StakeManagerTest {
 
         uint256 lockTime = stakeManager.MIN_LOCKUP_PERIOD() - 1;
         vm.expectRevert(StakeManager.StakeManager__InvalidLockTime.selector);
-        userVault.stake(100, lockTime);
+        userVault.depositAndStake(100, lockTime);
 
         lockTime = stakeManager.MAX_LOCKUP_PERIOD() + 1;
         vm.expectRevert(StakeManager.StakeManager__InvalidLockTime.selector);
-        userVault.stake(100, lockTime);
+        userVault.depositAndStake(100, lockTime);
     }
 
     function test_StakeWithoutLockUpTimeMintsMultiplierPoints() public {
@@ -129,7 +136,7 @@ contract StakeTest is StakeManagerTest {
         StakeVault userVault = _createStakingAccount(testUser, stakeAmount, lockToIncrease, mintAmount);
 
         vm.prank(testUser);
-        userVault.stake(stakeAmount2, 0);
+        userVault.depositAndStake(stakeAmount2, 0);
 
         (, uint256 balance,, uint256 totalMP,,,) = stakeManager.accounts(address(userVault));
         assertEq(balance, stakeAmount + stakeAmount2, "account balance");
@@ -138,7 +145,7 @@ contract StakeTest is StakeManagerTest {
         vm.warp(stakeManager.epochEnd());
 
         vm.prank(testUser);
-        userVault.stake(stakeAmount3, 0);
+        userVault.depositAndStake(stakeAmount3, 0);
 
         (, balance,, totalMP,,,) = stakeManager.accounts(address(userVault));
         assertEq(balance, stakeAmount + stakeAmount2 + stakeAmount3, "account balance 2");
@@ -154,9 +161,9 @@ contract StakeTest is StakeManagerTest {
             _createStakingAccount(testUser2, stakeAmount, stakeManager.MIN_LOCKUP_PERIOD(), mintAmount);
 
         vm.prank(testUser);
-        userVault.stake(stakeAmount2, 0);
+        userVault.depositAndStake(stakeAmount2, 0);
         vm.prank(testUser2);
-        userVault2.stake(stakeAmount2, 0);
+        userVault2.depositAndStake(stakeAmount2, 0);
 
         (, uint256 balance,, uint256 totalMP,,,) = stakeManager.accounts(address(userVault));
         assertEq(balance, stakeAmount + stakeAmount2, "account balance");
@@ -168,9 +175,9 @@ contract StakeTest is StakeManagerTest {
         vm.warp(stakeManager.epochEnd());
 
         vm.prank(testUser);
-        userVault.stake(stakeAmount2, 0);
+        userVault.depositAndStake(stakeAmount2, 0);
         vm.prank(testUser2);
-        userVault2.stake(stakeAmount2, 0);
+        userVault2.depositAndStake(stakeAmount2, 0);
 
         (, balance,, totalMP,,,) = stakeManager.accounts(address(userVault));
         assertEq(balance, stakeAmount + stakeAmount2 + stakeAmount2, "account balance 2");
@@ -187,9 +194,9 @@ contract StakeTest is StakeManagerTest {
         StakeVault userVault = _createStakingAccount(testUser, stakeAmount, 0, mintAmount);
         StakeVault userVault2 = _createStakingAccount(testUser2, stakeAmount, lockToIncrease, mintAmount);
         vm.prank(testUser);
-        userVault.stake(0, lockToIncrease);
+        userVault.depositAndStake(0, lockToIncrease);
         vm.prank(testUser2);
-        userVault2.stake(0, lockToIncrease);
+        userVault2.depositAndStake(0, lockToIncrease);
 
         (, uint256 balance,, uint256 totalMP,,,) = stakeManager.accounts(address(userVault));
         assertEq(balance, stakeAmount, "account balance");
@@ -201,9 +208,9 @@ contract StakeTest is StakeManagerTest {
         vm.warp(stakeManager.epochEnd());
 
         vm.prank(testUser);
-        userVault.stake(0, lockToIncrease);
+        userVault.depositAndStake(0, lockToIncrease);
         vm.prank(testUser2);
-        userVault2.stake(0, lockToIncrease);
+        userVault2.depositAndStake(0, lockToIncrease);
 
         (, balance,, totalMP,,,) = stakeManager.accounts(address(userVault));
         assertEq(balance, stakeAmount, "account balance 2");
@@ -222,9 +229,9 @@ contract StakeTest is StakeManagerTest {
         StakeVault userVault2 = _createStakingAccount(testUser2, stakeAmount, lockToIncrease, mintAmount);
 
         vm.prank(testUser);
-        userVault.stake(stakeAmount2, lockToIncrease);
+        userVault.depositAndStake(stakeAmount2, lockToIncrease);
         vm.prank(testUser2);
-        userVault2.stake(stakeAmount2, lockToIncrease);
+        userVault2.depositAndStake(stakeAmount2, lockToIncrease);
 
         (, uint256 balance,, uint256 totalMP,,,) = stakeManager.accounts(address(userVault));
         assertEq(balance, stakeAmount + stakeAmount2, "account balance");
@@ -236,9 +243,9 @@ contract StakeTest is StakeManagerTest {
         vm.warp(stakeManager.epochEnd());
 
         vm.prank(testUser);
-        userVault.stake(stakeAmount2, lockToIncrease);
+        userVault.depositAndStake(stakeAmount2, lockToIncrease);
         vm.prank(testUser2);
-        userVault2.stake(stakeAmount2, lockToIncrease);
+        userVault2.depositAndStake(stakeAmount2, lockToIncrease);
 
         (, balance,, totalMP,,,) = stakeManager.accounts(address(userVault));
         assertEq(balance, stakeAmount + stakeAmount2 + stakeAmount2, "account balance 2");
@@ -518,57 +525,259 @@ contract ExecuteAccountTest is StakeManagerTest {
         stakeManager.executeAccount(address(userVault), currentEpoch + 1);
     }
 
+    function test_ExecuteAccountBug() public {
+        uint256 stakeAmount = 10_000_000;
+        deal(stakeToken, testUser, stakeAmount);
+
+        // initial assumptions
+        assertEq(stakeManager.currentEpoch(), 0);
+        assertEq(stakeManager.pendingReward(), 0);
+        assertEq(stakeManager.totalSupplyMP(), 0);
+        assertEq(stakeManager.totalSupplyBalance(), 0);
+        StakeManager.Epoch memory currentEpoch = stakeManager.getEpoch(0);
+        assertEq(currentEpoch.startTime, block.timestamp);
+        assertEq(currentEpoch.epochReward, 0);
+        assertEq(currentEpoch.totalSupply, 0);
+
+        userVaults.push(_createStakingAccount(testUser, stakeAmount, 0));
+
+        assertEq(stakeManager.currentEpoch(), 1);
+        assertEq(stakeManager.pendingReward(), 0);
+        assertEq(stakeManager.totalSupplyMP(), stakeAmount);
+        assertEq(stakeManager.totalSupplyBalance(), stakeAmount);
+
+        // epoch `1` hasn't been processed yet, so no expected rewards
+        currentEpoch = stakeManager.getEpoch(1);
+        assertEq(currentEpoch.epochReward, 0);
+        assertEq(currentEpoch.totalSupply, 0);
+
+        // however, account should have balance and MPs
+        StakeManager.Account memory account = stakeManager.getAccount(address(userVaults[0]));
+        assertEq(account.balance, stakeAmount);
+        assertEq(account.bonusMP, stakeAmount);
+        assertEq(account.totalMP, stakeAmount);
+        assertEq(account.epoch, 1);
+
+        // -------- ADD REVENUE AND ADVANCE EPOCHS --------
+
+        // emulate revenue increase
+        console.log("--- Adding revenue: ", 10 ether);
+        deal(stakeToken, address(stakeManager), 10 ether);
+
+        // ensure current `epoch` has is complete
+        vm.warp(stakeManager.epochEnd());
+        // calculate account rewards and pending rewwards
+        stakeManager.executeEpoch();
+
+        assertEq(stakeManager.currentEpoch(), 2);
+
+        // emulate revenue increase
+        console.log("--- Adding revenue: ", 10 ether);
+        deal(stakeToken, address(stakeManager), 20 ether);
+
+        // ensure current `epoch` has is complete
+        vm.warp(stakeManager.epochEnd());
+        // calculate account rewards and pending rewwards
+        stakeManager.executeEpoch();
+
+        // account epoch is still at 1
+        account = stakeManager.getAccount(address(userVaults[0]));
+        assertEq(account.balance, stakeAmount);
+        assertEq(account.bonusMP, stakeAmount);
+        assertEq(account.totalMP, stakeAmount);
+        assertEq(account.epoch, 1);
+
+        stakeManager.executeAccount(address(userVaults[0]), 2);
+
+        stakeManager.executeAccount(address(userVaults[0]), 3);
+    }
+
     function test_ExecuteAccountMintMP() public {
         uint256 stakeAmount = 10_000_000;
         deal(stakeToken, testUser, stakeAmount);
 
-        userVaults.push(_createStakingAccount(makeAddr("testUser"), stakeAmount, 0));
-        userVaults.push(_createStakingAccount(makeAddr("testUser2"), stakeAmount, 0));
-        userVaults.push(_createStakingAccount(makeAddr("testUser3"), stakeAmount, 0));
+        // console.log("# NOW", block.timestamp);
+        // console.log("# START EPOCH", stakeManager.currentEpoch());
+        // console.log("# PND_REWARDS", stakeManager.pendingReward());
+        // console.log("------- CREATING ACCOUNT 1");
+        // userVaults.push(_createStakingAccount(testUser, stakeAmount, 0));
+        // (,,, , ,, uint256 epoch) = stakeManager.accounts(address(userVaults[0]));
+        // stakeManager.executeEpoch();
+        // console.log("# NOW", block.timestamp);
+        // vm.warp(stakeManager.epochEnd());
+        // console.log("# EPOCH END", block.timestamp);
+        // console.log("# START EPOCH", stakeManager.currentEpoch());
+        // console.log("# USER 1 EPOCH", epoch);
+        // console.log("# PND_REWARDS", stakeManager.pendingReward());
+        // vm.warp(stakeManager.epochEnd());
+        // stakeManager.executeEpoch();
+        // console.log("------- CREATING ACCOUNT 2");
+        // userVaults.push(_createStakingAccount(testUser2, stakeAmount, 0));
+        // (,,, , ,, epoch) = stakeManager.accounts(address(userVaults[1]));
+        // console.log("# NOW", block.timestamp);
+        // console.log("# START EPOCH", stakeManager.currentEpoch());
+        // console.log("# USER 2 EPOCH", epoch);
+        // console.log("# PND_REWARDS", stakeManager.pendingReward());
+        // userVaults.push(_createStakingAccount(makeAddr("testUser3"), stakeAmount, 0));
 
-        console.log("######### NOW", block.timestamp);
-        console.log("# START EPOCH", stakeManager.currentEpoch());
-        console.log("# PND_REWARDS", stakeManager.pendingReward());
+        // console.log("######### NOW", block.timestamp);
+        // console.log("# START EPOCH", stakeManager.currentEpoch());
+        // console.log("# PND_REWARDS", stakeManager.pendingReward());
 
-        for (uint256 i = 0; i < 3; i++) {
-            deal(stakeToken, address(stakeManager), 100 ether);
-            vm.warp(stakeManager.epochEnd());
-            console.log("######### NOW", block.timestamp);
-            stakeManager.executeEpoch();
-            console.log("##### NEW EPOCH", stakeManager.currentEpoch());
-            console.log("# PND_REWARDS", stakeManager.pendingReward());
+        // initial assumptions
+        assertEq(stakeManager.currentEpoch(), 0);
+        assertEq(stakeManager.pendingReward(), 0);
+        assertEq(stakeManager.totalSupplyMP(), 0);
+        assertEq(stakeManager.totalSupplyBalance(), 0);
+        StakeManager.Epoch memory currentEpoch = stakeManager.getEpoch(0);
+        assertEq(currentEpoch.startTime, block.timestamp);
+        assertEq(currentEpoch.epochReward, 0);
+        assertEq(currentEpoch.totalSupply, 0);
 
-            for (uint256 j = 0; j < userVaults.length; j++) {
-                (address rewardAddress,,, uint256 totalMPBefore, uint256 lastMintBefore,, uint256 epochBefore) =
-                    stakeManager.accounts(address(userVaults[j]));
-                uint256 rewardsBefore = ERC20(stakeToken).balanceOf(rewardAddress);
-                console.log("-Vault number", j);
-                console.log("--=====BEFORE=====");
-                console.log("---### totalMP :", totalMPBefore);
-                console.log("---#### lastMint :", lastMintBefore);
-                console.log("---## user_epoch :", epochBefore);
-                console.log("---##### rewards :", rewardsBefore);
-                console.log("--=====AFTER======");
-                stakeManager.executeAccount(address(userVaults[j]), epochBefore + 1);
-                (,,, uint256 totalMP, uint256 lastMint,, uint256 epoch) = stakeManager.accounts(address(userVaults[j]));
-                uint256 rewards = ERC20(stakeToken).balanceOf(rewardAddress);
-                console.log("---### deltaTime :", lastMint - lastMintBefore);
-                console.log("---### totalMP :", totalMP);
-                console.log("---#### lastMint :", lastMint);
-                console.log("---## user_epoch :", epoch);
-                console.log("---##### rewards :", rewards);
-                console.log("--=======#=======");
-                console.log("--# TOTAL_SUPPLY", stakeManager.totalSupply());
-                console.log("--# PND_REWARDS", stakeManager.pendingReward());
-                assertEq(lastMint, lastMintBefore + stakeManager.EPOCH_SIZE(), "must increaase lastMint");
-                assertEq(epoch, epochBefore + 1, "must increase epoch");
-                assertGt(totalMP, totalMPBefore, "must increase MPs");
-                assertGt(rewards, rewardsBefore, "must increase rewards");
-                lastMintBefore = lastMint;
-                epochBefore = epoch;
-                totalMPBefore = totalMP;
-            }
-        }
+        // Create stake vaults and deposit + stake `stakeAmount`
+        // Keep in mind that this advances `block.timestamp` to get past the
+        // `depositCooldownUntil` time
+        userVaults.push(_createStakingAccount(testUser, stakeAmount, 0));
+
+        assertEq(stakeManager.currentEpoch(), 1);
+        assertEq(stakeManager.pendingReward(), 0);
+        assertEq(stakeManager.totalSupplyMP(), stakeAmount);
+        assertEq(stakeManager.totalSupplyBalance(), stakeAmount);
+
+        // epoch `1` hasn't been processed yet, so no expected rewards
+        currentEpoch = stakeManager.getEpoch(1);
+        assertEq(currentEpoch.epochReward, 0);
+        assertEq(currentEpoch.totalSupply, 0);
+
+        // however, account should have balance and MPs
+        StakeManager.Account memory account = stakeManager.getAccount(address(userVaults[0]));
+        assertEq(account.balance, stakeAmount);
+        assertEq(account.bonusMP, stakeAmount);
+        assertEq(account.totalMP, stakeAmount);
+        assertEq(account.epoch, 1);
+
+        // emulate revenue increase
+        console.log("--- Adding revenue: ", 100 ether);
+        deal(stakeToken, address(stakeManager), 100 ether);
+
+        // ensure current `epoch` has is complete
+        vm.warp(stakeManager.epochEnd());
+        // calculate account rewards and pending rewwards
+        stakeManager.executeEpoch();
+
+        assertEq(stakeManager.currentEpoch(), 2);
+        // previous epoch rewards should be added to `pendingReward`
+        currentEpoch = stakeManager.getEpoch(1);
+        assertEq(currentEpoch.epochReward, 100 ether, "epoch reward");
+        assertEq(stakeManager.pendingReward(), 100 ether, "pending rewards");
+        assertEq(stakeManager.totalSupplyMP(), stakeAmount);
+        assertEq(stakeManager.totalSupplyBalance(), stakeAmount);
+        assertEq(currentEpoch.totalSupply, account.balance + account.totalMP);
+
+        // account epoch is still at 1
+        account = stakeManager.getAccount(address(userVaults[0]));
+        assertEq(account.balance, stakeAmount);
+        assertEq(account.bonusMP, stakeAmount);
+        assertEq(account.totalMP, stakeAmount);
+        assertEq(account.epoch, 1);
+
+        stakeManager.executeAccount(address(userVaults[0]), 2);
+
+        assertEq(stakeManager.pendingReward(), 0);
+        account = stakeManager.getAccount(address(userVaults[0]));
+        assertEq(account.balance, stakeAmount);
+        assertEq(account.bonusMP, stakeAmount);
+        assertGt(account.totalMP, stakeAmount);
+        assertEq(ERC20(stakeToken).balanceOf(userVaults[0].owner()), 100 ether);
+        assertEq(account.epoch, 2);
+
+        // second staker comes in
+        userVaults.push(_createStakingAccount(testUser2, stakeAmount, 0));
+        StakeManager.Account memory secondAccount = stakeManager.getAccount(address(userVaults[1]));
+
+        assertEq(stakeManager.currentEpoch(), 3);
+        assertEq(stakeManager.pendingReward(), 0);
+        assertEq(secondAccount.epoch, 3);
+        assertEq(secondAccount.balance, stakeAmount);
+        assertEq(secondAccount.bonusMP, stakeAmount);
+        assertEq(secondAccount.totalMP, stakeAmount);
+        // assertEq(stakeManager.totalSupplyMP(), stakeAmount);
+        assertEq(stakeManager.totalSupplyBalance(), stakeAmount * 2);
+
+        // emulate revenue increase
+        deal(stakeToken, address(stakeManager), 100 ether);
+        vm.warp(stakeManager.epochEnd());
+        // calculate account rewards and pending rewwards
+        // stakeManager.executeEpoch();
+        // assertEq(stakeManager.pendingReward(), 100 ether);
+        stakeManager.executeAccount(address(userVaults[1]), 4);
+        secondAccount = stakeManager.getAccount(address(userVaults[1]));
+        assertEq(secondAccount.epoch, 4);
+        assertEq(secondAccount.balance, stakeAmount);
+        assertEq(secondAccount.bonusMP, stakeAmount);
+        assertGt(secondAccount.totalMP, stakeAmount);
+        assertEq(stakeManager.pendingReward(), 50 ether);
+
+        account = stakeManager.getAccount(address(userVaults[0]));
+        assertEq(account.epoch, 2);
+        stakeManager.executeAccount(address(userVaults[0]), 4);
+        // assertEq(stakeManager.pendingReward(), 50 ether);
+        // stakeManager.executeAccount(address(userVaults[0]), 4);
+        assertEq(stakeManager.pendingReward(), 0);
+
+        // ensure current `epoch` has is complete
+
+        // userVaults.push(_createStakingAccount(makeAddr("testUser3"), stakeAmount, 0));
+
+        // for (uint256 i = 0; i < 3; i++) {
+
+        // for (uint256 i = 0; i < 1; i++) {
+        //     // emulate revenue increase
+        //     deal(stakeToken, address(stakeManager), 100 ether);
+        //     // ensure current `epoch` has is complete
+        //     vm.warp(stakeManager.epochEnd());
+        //     // calculate account rewards and pending rewwards
+        //     stakeManager.executeEpoch();
+        //
+        //     // uint256 currentEpoch = stakeManager.currentEpoch();
+        //     // (uint256 startTime, uint256 epochReward, uint256 totalSupply) = stakeManager.epochs(currentEpoch);
+        //     //
+        //     // console.log("######### NOW", block.timestamp);
+        //     // console.log("##### NEW EPOCH", stakeManager.currentEpoch());
+        //     // console.log("# PND_REWARDS", stakeManager.pendingReward());
+        //
+        //     for (uint256 j = 0; j < userVaults.length; j++) {
+        //         // (address rewardAddress,,, uint256 totalMPBefore, uint256 lastMintBefore,, uint256 epochBefore) =
+        //         //     stakeManager.accounts(address(userVaults[j]));
+        //         // uint256 rewardsBefore = ERC20(stakeToken).balanceOf(rewardAddress);
+        //         // console.log("-Vault number", j);
+        //         // console.log("--=====BEFORE=====");
+        //         // console.log("---### totalMP :", totalMPBefore);
+        //         // console.log("---#### lastMint :", lastMintBefore);
+        //         // console.log("---## user_epoch :", epochBefore);
+        //         // console.log("---##### rewards :", rewardsBefore);
+        //         // console.log("--=====AFTER======");
+        //         // stakeManager.executeAccount(address(userVaults[j]), epochBefore + 1);
+        //         // (,,, uint256 totalMP, uint256 lastMint,, uint256 epoch) =
+        //         //     stakeManager.accounts(address(userVaults[j]));
+        //         // uint256 rewards = ERC20(stakeToken).balanceOf(rewardAddress);
+        //         // console.log("---### deltaTime :", lastMint - lastMintBefore);
+        //         // console.log("---### totalMP :", totalMP);
+        //         // console.log("---#### lastMint :", lastMint);
+        //         // console.log("---## user_epoch :", epoch);
+        //         // console.log("---##### rewards :", rewards);
+        //         // console.log("--=======#=======");
+        //         // console.log("--# TOTAL_SUPPLY", stakeManager.totalSupply());
+        //         // console.log("--# PND_REWARDS", stakeManager.pendingReward());
+        //         // assertEq(lastMint, lastMintBefore + stakeManager.EPOCH_SIZE(), "must increaase lastMint");
+        //         // assertEq(epoch, epochBefore + 1, "must increase epoch");
+        //         // assertGt(totalMP, totalMPBefore, "must increase MPs");
+        //         // assertGt(rewards, rewardsBefore, "must increase rewards");
+        //         // lastMintBefore = lastMint;
+        //         // epochBefore = epoch;
+        //         // totalMPBefore = totalMP;
+        //     }
+        // }
     }
 
     function test_ShouldNotMintMoreThanCap() public {

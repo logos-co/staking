@@ -2,6 +2,7 @@
 
 pragma solidity ^0.8.18;
 
+import { console } from "forge-std/console.sol";
 import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
@@ -43,6 +44,8 @@ contract StakeManager is Ownable {
     uint256 public constant MAX_LOCKUP_PERIOD = 4 * YEAR; // 4 years
     uint256 public constant MP_APY = 1;
     uint256 public constant MAX_BOOST = 4;
+    uint256 public constant DEPOSIT_COOLDOWN_PERIOD = 2 weeks;
+    uint256 public constant WITHDRAW_COOLDOWN_PERIOD = 2 weeks;
 
     mapping(address index => Account value) public accounts;
     mapping(uint256 index => Epoch value) public epochs;
@@ -108,12 +111,22 @@ contract StakeManager is Ownable {
      */
     modifier finalizeEpoch() {
         if (block.timestamp >= epochEnd() && address(migration) == address(0)) {
+            console.log("Processing epoch...");
+            console.log("--- currentEpoch: ", currentEpoch);
+
+            uint256 _epochReward = epochReward();
+            console.log("--- epochReward: ", _epochReward);
             //finalize current epoch
-            epochs[currentEpoch].epochReward = epochReward();
+            epochs[currentEpoch].epochReward = _epochReward;
             epochs[currentEpoch].totalSupply = totalSupply();
             pendingReward += epochs[currentEpoch].epochReward;
+
+            console.log("--- totalSupply: ", totalSupply());
+            console.log("--- pendingReward: ", pendingReward);
             //create new epoch
             currentEpoch++;
+            console.log("Done. New epoch started: ", currentEpoch);
+            console.log("\n");
             epochs[currentEpoch].startTime = block.timestamp;
         }
         _;
@@ -133,6 +146,7 @@ contract StakeManager is Ownable {
      * @dev Reverts when resulting locked time is not in range of [MIN_LOCKUP_PERIOD, MAX_LOCKUP_PERIOD]
      */
     function stake(uint256 _amount, uint256 _timeToIncrease) external onlyVault noPendingMigration finalizeEpoch {
+        console.log("--- Staking: ", _amount);
         Account storage account = accounts[msg.sender];
 
         if (account.lockUntil == 0) {
@@ -252,6 +266,7 @@ contract StakeManager is Ownable {
         onlyAccountInitialized(_vault)
         finalizeEpoch
     {
+        console.log("Processing account: ", _vault);
         _processAccount(accounts[_vault], _limitEpoch);
     }
 
@@ -373,14 +388,30 @@ contract StakeManager is Ownable {
         uint256 userEpoch = account.epoch;
         uint256 mpDifference = account.totalMP;
         for (Epoch storage iEpoch = epochs[userEpoch]; userEpoch < _limitEpoch; userEpoch++) {
+            console.log("--- processing account epoch: ", userEpoch);
+            uint256 userSupply = account.balance + account.totalMP;
+            console.log("--- userSupply in epoch (before): ", userSupply);
+            console.log("------ account.balance: ", account.balance);
+            console.log("------ account.totalMP: ", account.totalMP);
+            console.log("--- epoch totalSupply (before): ", iEpoch.totalSupply);
+            console.log("------ Minting multiplier points for epoch...");
             //mint multiplier points to that epoch
             _mintMP(account, iEpoch.startTime + EPOCH_SIZE, iEpoch);
-            uint256 userSupply = account.balance + account.totalMP;
+            userSupply = account.balance + account.totalMP;
+            console.log("--- userSupply in epoch (after): ", userSupply);
+            console.log("------ account.balance: ", account.balance);
+            console.log("------ account.totalMP: ", account.totalMP);
+            console.log("--- epoch totalSupply (after): ", iEpoch.totalSupply);
             uint256 userEpochReward = Math.mulDiv(userSupply, iEpoch.epochReward, iEpoch.totalSupply);
+            console.log("--- userEpochReward: ", userEpochReward);
 
             userReward += userEpochReward;
             iEpoch.epochReward -= userEpochReward;
+            console.log("--- removing epoch userSupply from epoch totalSupply: ", userSupply);
             iEpoch.totalSupply -= userSupply;
+            console.log("--- New epoch epochReward: ", iEpoch.epochReward);
+            console.log("--- New epoch totalSupply: ", iEpoch.totalSupply);
+            console.log("\n");
         }
         account.epoch = userEpoch;
         if (userReward > 0) {
@@ -417,6 +448,8 @@ contract StakeManager is Ownable {
             //bonus for increased lock time
             mpToMint += _getMPToMint(account.balance + amount, increasedLockTime);
         }
+
+        console.log("--- Minting MP: ", mpToMint);
         //update storage
         totalSupplyMP += mpToMint;
         account.bonusMP += mpToMint;
@@ -437,6 +470,8 @@ contract StakeManager is Ownable {
             account.bonusMP,
             account.totalMP
         );
+
+        console.log("--------- increasedMP: ", increasedMP);
 
         //update storage
         account.lastMint = processTime;
@@ -506,5 +541,13 @@ contract StakeManager is Ownable {
      */
     function epochEnd() public view returns (uint256 _epochEnd) {
         return epochs[currentEpoch].startTime + EPOCH_SIZE;
+    }
+
+    function getEpoch(uint256 _epoch) public view returns (Epoch memory) {
+        return epochs[_epoch];
+    }
+
+    function getAccount(address _account) public view returns (Account memory) {
+        return accounts[_account];
     }
 }
