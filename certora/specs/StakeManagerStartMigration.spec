@@ -6,23 +6,23 @@ methods {
   function totalSupplyBalance() external returns (uint256) envfree;
   function totalSupplyMP() external returns (uint256) envfree;
   function previousManager() external returns (address) envfree;
-  function accounts(address) external returns(address, uint256, uint256, uint256, uint256, uint256, uint256) envfree;
+  function accounts(address) external returns(address, uint256, uint256, uint256, uint256, uint256, uint256, uint256) envfree;
 
-  function _.migrationInitialize(uint256,uint256,uint256,uint256) external => DISPATCHER(true);
+  function _.migrationInitialize(uint256,uint256,uint256,uint256,uint256,uint256,uint256) external => DISPATCHER(true);
   function StakeManagerNew.totalSupplyBalance() external returns (uint256) envfree;
 }
 
 
 function getAccountMultiplierPoints(address addr) returns uint256 {
   uint256 multiplierPoints;
-  _, _, _, multiplierPoints, _, _, _ = accounts(addr);
+  _, _, _, multiplierPoints, _, _, _, _ = accounts(addr);
 
   return multiplierPoints;
 }
 
 function getAccountBalance(address addr) returns uint256 {
   uint256 balance;
-  _, balance, _, _, _, _, _ = accounts(addr);
+  _, balance, _, _, _, _, _, _ = accounts(addr);
 
   return balance;
 }
@@ -33,7 +33,7 @@ definition blockedWhenMigrating(method f) returns bool = (
       f.selector == sig:lock(uint256).selector ||
       f.selector == sig:executeEpoch().selector ||
       f.selector == sig:startMigration(address).selector ||
-      f.selector == sig:migrationInitialize(uint256,uint256,uint256,uint256).selector
+      f.selector == sig:migrationInitialize(uint256,uint256,uint256,uint256,uint256,uint256,uint256).selector
       );
 
 definition blockedWhenNotMigrating(method f) returns bool = (

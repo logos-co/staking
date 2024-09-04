@@ -5,7 +5,7 @@ methods {
   function ERC20A.balanceOf(address) external returns (uint256) envfree;
   function ERC20A.allowance(address, address) external returns(uint256) envfree;
   function ERC20A.totalSupply() external returns(uint256) envfree;
-  function StakeManager.accounts(address) external returns(address, uint256, uint256, uint256, uint256, uint256, uint256) envfree;
+  function StakeManager.accounts(address) external returns(address, uint256, uint256, uint256, uint256, uint256, uint256, uint256) envfree;
   function _.migrateFrom(address, bool, StakeManager.Account) external => DISPATCHER(true);
   function _.increaseTotalMP(uint256) external => DISPATCHER(true);
   function _.owner() external => DISPATCHER(true);
@@ -19,13 +19,13 @@ function mulDivSummary(uint256 a, uint256 b, uint256 c) returns uint256 {
 
 function getAccountBalance(address addr) returns uint256 {
   uint256 balance;
-  _, balance, _, _, _, _, _ = stakeManager.accounts(addr);
+  _, balance, _, _, _, _, _, _ = stakeManager.accounts(addr);
 
   return balance;
 }
 
 definition isMigrationFunction(method f) returns bool = (
-  f.selector == sig:stakeManager.migrationInitialize(uint256,uint256,uint256,uint256).selector ||
+  f.selector == sig:stakeManager.migrationInitialize(uint256,uint256,uint256,uint256,uint256,uint256,uint256).selector ||
   f.selector == sig:stakeManager.migrateFrom(address,bool,StakeManager.Account).selector ||
   f.selector == sig:stakeManager.increaseTotalMP(uint256).selector ||
   f.selector == sig:stakeManager.startMigration(address).selector
