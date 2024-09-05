@@ -449,7 +449,10 @@ contract StakeManager is Ownable {
             userReward += userEpochReward;
             iEpoch.epochReward -= userEpochReward;
             iEpoch.totalSupply -= userSupply;
-            //TODO: remove epoch when iEpoch.totalSupply reaches zero
+            if (iEpoch.totalSupply == 0) {
+                pendingReward -= iEpoch.epochReward;
+                delete epochs[userEpoch];
+            }
             userEpoch++;
         }
         account.epoch = userEpoch;
@@ -457,8 +460,8 @@ contract StakeManager is Ownable {
             pendingReward -= userReward;
             stakedToken.transfer(account.rewardAddress, userReward);
         }
-        mpDifference = account.totalMP - mpDifference; //TODO: optimize, this only needed for migration
         if (address(migration) != address(0)) {
+            mpDifference = account.totalMP - mpDifference;
             migration.increaseTotalMP(mpDifference);
         }
     }
