@@ -633,9 +633,18 @@ contract StakeManager is Ownable {
         return epochs[currentEpoch].startTime + EPOCH_SIZE;
     }
 
-    function balanceOf(address _account) public view returns (uint256) {
+    /**
+     * @notice Returns balance of given account
+     * If account has not been processed yet, it will calculate the balance after all processing have been done
+     * @param _account account to check
+     * @return balance of given account
+     */
+    function balanceOf(address _account) public view returns (uint256 balance) {
         Account account = accounts[_account];
-        return account.balance + account.totalMP;
+        if(account.epoch < currentEpoch) {
+            balance +=_getMaxMPToMint(account.balance, epoch[currentEpoch].startTime - account.lastMint);
+        }
+        balance += account.balance + account.totalMP;
     }
 
     function accountAssets(address _account) public view returns (uint256) {
