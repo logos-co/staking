@@ -1,25 +1,26 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity >=0.8.0;
 
-import "./StakeVault.sol";
-import "./StakeManager.sol";
-import { IERC20 } from "@openzeppelin/contracts/token/IERC20/IERC20.sol";
+import { StakeVault } from "./StakeVault.sol";
+import { StakeManager } from "./StakeManager.sol";
+import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { IERC4626 } from "@openzeppelin/contracts/interfaces/IERC4626.sol";
 import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 
 contract VaultManager is IERC4626 {
     using Math for uint256;
+
     error VaultFactory__InvalidStakeManagerAddress();
 
     StakeManager public stakeManager;
     IERC20 public assetToken;
 
-    mapping(address => address vault) public vaults;
-    mapping(address => address vault) public emptyVaults;
+    mapping(address => address[] vault) public vaults;
+    mapping(address => address[] vault) public emptyVaults;
 
-
-    modifier onlyVaultOwner(address _owner) {
-        require(vaults[_owner] == msg.sender, "VaultManager: Only vault owner can call this function");
+    modifier onlyVaultOwnerAuthorized(address _owner) {
+        //TODO: include authorization mechanism
+        require(_owner == msg.sender, "VaultManager: msg.sender not authorized by owner.");
         _;
     }
 
@@ -28,29 +29,47 @@ contract VaultManager is IERC4626 {
             revert VaultFactory__InvalidStakeManagerAddress();
         }
         stakeManager = StakeManager(_stakeManager);
-        assetToken = _stakeManager.stakedToken();
+        assetToken = stakeManager.stakedToken();
     }
 
-    function mint(uint256 shares, address receiver) external returns (uint256 assets){
+    function mint(uint256 shares, address receiver) external returns (uint256 assets) {
         return _stake(_convertToAssets(shares), receiver, 0);
     }
 
-    function deposit(uint256 assets, address receiver) external returns (uint256 shares){
+    function deposit(uint256 assets, address receiver) external returns (uint256 shares) {
         return _stake(assets, receiver, 0);
     }
+
+    function mint(uint256 shares, address receiver, uint256 _secondsToLock) external returns (uint256 assets) {
+        return _stake(_convertToAssets(shares), receiver, _secondsToLock);
+    }
+
+    function deposit(uint256 assets, address receiver, uint256 _secondsToLock) external returns (uint256 shares) {
+        return _stake(assets, receiver, _secondsToLock);
+    }
+
     function _updateStakeManager() internal {
         StakeManager currentStakeManager = stakeManager;
-        while(currentStakeManager.migration() != address(0)) {
+        while (address(currentStakeManager.migration()) != address(0)) {
             currentStakeManager = currentStakeManager.migration();
         }
         stakeManager = currentStakeManager;
     }
-    function _stake(uint256 assets, address _owner, uint256 secondsToLock) onlyVaultOwner(_owner) internal returns (uint256 shares){
+
+    function _stake(
+        uint256 assets,
+        address _owner,
+        uint256 secondsToLock
+    )
+        internal
+        onlyVaultOwnerAuthorized(_owner)
+        returns (uint256 shares)
+    {
         _updateStakeManager();
         StakeVault vault;
-        if(emptyVaults[_owner].lenght > 0) {
+        if (emptyVaults[_owner].lenght > 0) {
             vault = StakeVault(emptyVaults[_owner][emptyVaults[_owner].lenght - 1]);
-            while(vault.stakeManager().migration != address(0)) {
+            while (vault.stakeManager().migration != address(0)) {
                 vault.acceptMigration();
             }
             vaults[_owner].push(vault);
@@ -66,11 +85,18 @@ contract VaultManager is IERC4626 {
         emit Deposit(msg.sender, _owner, assets, shares);
     }
 
-
-    function redeem(uint256 _shares, address receiver, address _owner) onlyVaultOwner(_owner) external returns (uint256 assets){      
+    function redeem(
+        uint256 _shares,
+        address receiver,
+        address _owner
+    )
+        external
+        onlyVaultOwnerAuthorized(_owner)
+        returns (uint256 assets)
+    {
         uint256 shares = _shares;
-        for (uint256 i = vaults[_owner].length; i > 0 ; i--) {
-            address userVault = vaults[_owner][i-1];
+        for (uint256 i = vaults[_owner].length; i > 0; i--) {
+            address userVault = vaults[_owner][i - 1];
             if (stakeManager.assetsLockedUntil(userVault) > block.timestamp) {
                 uint256 vaultShares = stakeManager.balanceOf(userVault);
                 if (_shares > vaultShares) {
@@ -91,10 +117,18 @@ contract VaultManager is IERC4626 {
         }
         emit Withdraw(msg.sender, receiver, _owner, assets, _shares);
     }
-    
-    function withdraw(uint256 assets, address receiver, address _owner) onlyVaultOwner(_owner) external returns (uint256 shares){
-        for (uint256 i = vaults[_owner].length; i > 0 ; i--) {
-            address userVault = vaults[_owner][i-1];
+
+    function withdraw(
+        uint256 assets,
+        address receiver,
+        address _owner
+    )
+        external
+        onlyVaultOwnerAuthorized(_owner)
+        returns (uint256 shares)
+    {
+        for (uint256 i = vaults[_owner].length; i > 0; i--) {
+            address userVault = vaults[_owner][i - 1];
             if (stakeManager.assetsLockedUntil(userVault) > block.timestamp) {
                 uint256 userAssets = stakeManager.accountAssets(userVault);
                 if (assets > userAssets) {
@@ -113,56 +147,64 @@ contract VaultManager is IERC4626 {
         emit Withdraw(msg.sender, receiver, _owner, assets, shares);
     }
 
-    function leave(address receiver, address _owner) onlyVaultOwner(_owner) external returns (uint256 assets){
+    function leave(
+        address receiver,
+        address _owner
+    )
+        external
+        onlyVaultOwnerAuthorized(_owner)
+        returns (uint256 assets)
+    {
         for (uint256 i = 0; i < vaults[_owner].length; i++) {
             StakeVault(vaults[_owner][i]).leave(receiver);
         }
     }
 
-    function acceptMigration(address _owner) onlyVaultOwner(_owner) external {
+    function acceptMigration(address _owner) external onlyVaultOwnerAuthorized(_owner) {
         for (uint256 i = 0; i < vaults[_owner].length; i++) {
             StakeVault vault = StakeVault(vaults[_owner][i]);
-            while(vault.stakeManager().migration != address(0)) {
+            while (vault.stakeManager().migration != address(0)) {
                 vault.acceptMigration();
             }
         }
     }
 
     // Functions for asset and total assets
-    function asset() external view returns (address assetTokenAddress){
+    function asset() external view returns (address assetTokenAddress) {
         return stakeManager.stakedToken();
     }
-    
-    function totalAssets() public view returns (uint256 totalManagedAssets){
+
+    function totalAssets() public view returns (uint256 totalManagedAssets) {
         return stakeManager.totalSupplyBalance();
     }
 
     // Functions for conversion
-    function convertToShares(uint256 assets) external view returns (uint256 shares){
+    function convertToShares(uint256 assets) external view returns (uint256 shares) {
         return _convertToShares(assets);
     }
-    function convertToAssets(uint256 shares) external view returns (uint256 assets){
+
+    function convertToAssets(uint256 shares) external view returns (uint256 assets) {
         return _convertToAssets(shares);
     }
 
     // Functions for deposit, mint, withdraw, and redeem
-    function maxDeposit(address) external view returns (uint256 maxAssets){
+    function maxDeposit(address) external view returns (uint256 maxAssets) {
         return type(uint256).max;
     }
 
-    function maxMint(address ) external view returns (uint256 maxShares){
+    function maxMint(address) external view returns (uint256 maxShares) {
         return type(uint256).max;
     }
 
-    function previewDeposit(uint256 assets) external view returns (uint256 shares){
+    function previewDeposit(uint256 assets) external view returns (uint256 shares) {
         return _convertToShares(assets);
     }
 
-    function previewMint(uint256 shares) external view returns (uint256 assets){
+    function previewMint(uint256 shares) external view returns (uint256 assets) {
         return _convertToAssets(shares);
     }
 
-    function maxWithdraw(address _owner) external view returns (uint256 maxAssets){
+    function maxWithdraw(address _owner) external view returns (uint256 maxAssets) {
         for (uint256 i = 0; i < vaults[_owner].length; i++) {
             address userVault = vaults[_owner][i];
             if (stakeManager.assetsLockedUntil(userVault) > block.timestamp) {
@@ -172,7 +214,7 @@ contract VaultManager is IERC4626 {
         return maxAssets;
     }
 
-    function maxRedeem(address _owner) external view returns (uint256 maxShares){
+    function maxRedeem(address _owner) external view returns (uint256 maxShares) {
         for (uint256 i = 0; i < vaults[_owner].length; i++) {
             address userVault = vaults[_owner][i];
             if (stakeManager.assetsLockedUntil(userVault) > block.timestamp) {
@@ -181,27 +223,27 @@ contract VaultManager is IERC4626 {
         }
         return maxShares;
     }
-    function previewWithdraw(uint256 assets) external view returns (uint256 shares){
+
+    function previewWithdraw(uint256 assets) external view returns (uint256 shares) {
         return _convertToShares(assets);
     }
 
-    function previewRedeem(uint256 shares) external view returns (uint256 assets){
+    function previewRedeem(uint256 shares) external view returns (uint256 assets) {
         return _convertToAssets(shares);
     }
-
 
     /**
      * @dev Internal conversion function (from assets to shares) with support for rounding direction.
      */
     function _convertToShares(uint256 assets) internal view virtual returns (uint256) {
-        return assets.mulDiv(totalSupply() + 10 , totalAssets() + 1);
+        return assets.mulDiv(stakeManager.totalSupply() + 10, stakeManager.totalSupplyBalance() + 1);
     }
 
     /**
      * @dev Internal conversion function (from shares to assets) with support for rounding direction.
      */
-    function _convertToAssets(uint256 shares) internal view virtual returns (uint256) {
-        return shares.mulDiv(totalAssets() + 1, totalSupply() + 10);
+    function _convertToAssets(uint256 shares, uint256 _secondsToLock) internal view virtual returns (uint256) {
+        return (shares).mulDiv(stakeManager.totalSupplyBalance() + 1, stakeManager.totalSupply() + 10);
     }
 
     // Functions for ERC20
@@ -221,11 +263,11 @@ contract VaultManager is IERC4626 {
         return stakeManager.totalSupply();
     }
 
-    function balanceOf(address _owner) public view returns (uint256 assets){
+    function balanceOf(address _owner) public view returns (uint256 assets) {
         return _convertToAssets(stakeManager.balanceOf(_owner));
     }
 
-     function transfer(address, uint256) external returns (bool) {
+    function transfer(address, uint256) external returns (bool) {
         revert();
         return false;
     }
@@ -243,6 +285,4 @@ contract VaultManager is IERC4626 {
     function allowance(address, address) external view returns (uint256) {
         return 0;
     }
-    
-
 }
