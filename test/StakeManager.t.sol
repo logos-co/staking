@@ -426,6 +426,26 @@ contract ExecuteAccountTest is StakeManagerTest {
         stakeManager.executeAccount(address(userVault), currentEpoch + 1);
     }
 
+    //Stake, pass epoch, execute epoch, passEpoch, executeEpoch, executeAccount, verify amount of MPs, totalMPs, etc.
+    function test_ExecuteAccountLimit() public {
+        uint256 stakeAmount = 10_000_000;
+        deal(stakeToken, testUser, stakeAmount);
+        userVaults.push(_createStakingAccount(makeAddr("testUser"), stakeAmount, 0));
+
+        (,,, uint256 totalMP, uint256 lastMint,, uint256 epoch,) = stakeManager.accounts(address(userVaults[0]));
+        vm.warp(stakeManager.epochEnd());
+        stakeManager.executeEpoch();
+        vm.warp(stakeManager.epochEnd());
+
+        //expected MP is, the starting totalMP + the calculatedMPToMint of user balance for one EPOCH_SIZE multiplied by
+        // 2.
+        uint256 expectedMP = totalMP + (stakeManager.calculateMPToMint(stakeAmount, stakeManager.EPOCH_SIZE()) * 2);
+        stakeManager.executeAccount(address(userVaults[0]), stakeManager.currentEpoch() + 1);
+        (,,, totalMP, lastMint,, epoch,) = stakeManager.accounts(address(userVaults[0]));
+
+        assertEq(totalMP, expectedMP, "totalMP is not what the contract itself predicted");
+    }
+
     function test_ExecuteAccountMintMP() public {
         uint256 stakeAmount = 10_000_000;
         deal(stakeToken, testUser, stakeAmount);
