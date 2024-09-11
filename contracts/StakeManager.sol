@@ -441,7 +441,8 @@ contract StakeManager is Ownable {
         uint256 userReward;
         uint256 userEpoch = account.epoch;
         uint256 mpDifference = account.totalMP;
-        for (Epoch storage iEpoch = epochs[userEpoch]; userEpoch < _limitEpoch; userEpoch++) {
+        while (userEpoch < _limitEpoch) {
+            Epoch storage iEpoch = epochs[userEpoch];
             //mint multiplier points to that epoch
             _mintMP(account, iEpoch.startTime + EPOCH_SIZE, iEpoch);
             uint256 userSupply = account.balance + account.totalMP;
@@ -450,6 +451,7 @@ contract StakeManager is Ownable {
             iEpoch.epochReward -= userEpochReward;
             iEpoch.totalSupply -= userSupply;
             //TODO: remove epoch when iEpoch.totalSupply reaches zero
+            userEpoch++;
         }
         account.epoch = userEpoch;
         if (userReward > 0) {
