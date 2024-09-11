@@ -5,6 +5,7 @@ pragma solidity ^0.8.18;
 import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
+import { console } from "forge-std/Test.sol";
 
 import { StakeVault } from "./StakeVault.sol";
 
@@ -59,6 +60,7 @@ contract StakeManager is Ownable {
         uint256 epochReward;
         uint256 totalSupply;
         uint256 estimatedMP;
+        uint256 nextEpoch; //DEBUG: should be removed.
     }
 
     uint256 public constant EPOCH_SIZE = 1 weeks;
@@ -135,34 +137,48 @@ contract StakeManager is Ownable {
         _;
     }
 
-    /**
-     * @notice Process epoch if it has ended
-     */
-    modifier finalizeEpoch() {
-        if (block.timestamp >= epochEnd() && address(migration) == address(0)) {
+
+    function _finalizeEpoch() internal returns(bool finalized) {
+        Epoch storage epoch = epochs[currentEpoch];
+        uint256 epochEnd = epoch.startTime + EPOCH_SIZE;
+        finalized = block.timestamp >= epochEnd;
+        if(finalized) {
+            console.log("##### FINALIZE EPOCH", currentEpoch);
             uint256 expiredMP = stakeRewardEstimate.getExpiredMP(currentEpoch);
             if (expiredMP > 0) {
                 totalMPPerEpoch -= expiredMP;
                 stakeRewardEstimate.deleteExpiredMP(currentEpoch);
             }
-            epochs[currentEpoch].estimatedMP = totalMPPerEpoch - currentEpochTotalExpiredMP;
+            epoch.estimatedMP = totalMPPerEpoch - currentEpochTotalExpiredMP;
             delete currentEpochTotalExpiredMP;
-            pendingMPToBeMinted += epochs[currentEpoch].estimatedMP;
+            pendingMPToBeMinted += epoch.estimatedMP;
 
             //finalize current epoch
-            epochs[currentEpoch].epochReward = epochReward();
-            epochs[currentEpoch].totalSupply = totalSupply();
-            pendingReward += epochs[currentEpoch].epochReward;
+            epoch.epochReward = epochReward();
+            epoch.totalSupply = totalSupply();
+            pendingReward += epoch.epochReward;
 
             //create new epoch
             currentEpoch++;
-            epochs[currentEpoch].startTime = block.timestamp;
+            console.log("##### NEW EPOCH", currentEpoch);
+            epochs[currentEpoch].startTime = epochEnd;
+            epochs[currentEpoch].nextEpoch = currentEpoch+1; //DEBUG: should be removed
+        }
+    }
+
+    /**
+     * @notice Process epoch if it has ended
+     */
+    modifier finalizeEpoch() {
+        if(address(migration) == address(0)) {
+            do {} while(_finalizeEpoch());    
         }
         _;
     }
 
     constructor(address _stakedToken, address _previousManager) {
         epochs[0].startTime = block.timestamp;
+        epochs[0].nextEpoch = 1; //DEBUG: should be removed
         previousManager = StakeManager(_previousManager);
         stakedToken = ERC20(_stakedToken);
         if (address(previousManager) != address(0)) {
@@ -182,8 +198,7 @@ contract StakeManager is Ownable {
      * @dev Reverts when amount staked results in less than 1 MP per epoch.
      */
     function stake(uint256 _amount, uint256 _secondsToLock) external onlyVault noPendingMigration finalizeEpoch {
-        Account storage account = accounts[msg.sender];
-        if (account.balance > 0 || account.lockUntil != 0) {
+        if (accounts[msg.sender].balance > 0) {
             revert StakeManager__AlreadyStaked();
         }
         if (_secondsToLock != 0 && (_secondsToLock < MIN_LOCKUP_PERIOD || _secondsToLock > MAX_LOCKUP_PERIOD)) {
@@ -200,16 +215,26 @@ contract StakeManager is Ownable {
         uint256 epochAmountToReachMpLimit = (maxMpToMint) / mpPerEpoch;
         uint256 mpLimitEpoch = currentEpoch + epochAmountToReachMpLimit;
         uint256 lastEpochAmountToMint = ((mpPerEpoch * (epochAmountToReachMpLimit + 1)) - maxMpToMint);
+        uint256 bonusMP = _amount;
+        if (_secondsToLock > 0) {
+            //bonus for lock time
+            bonusMP += _getMPToMint(_amount, _secondsToLock);
+        }
 
         // account initialization
-        account.lockUntil = block.timestamp + _secondsToLock;
-        account.epoch = currentEpoch; //starts in current epoch
-        account.rewardAddress = StakeVault(msg.sender).owner();
-        account.balance = _amount;
-        account.mpLimitEpoch = mpLimitEpoch;
-        _mintBonusMP(account, _secondsToLock, _amount);
+        accounts[msg.sender] = Account({
+            rewardAddress: StakeVault(msg.sender).owner(),
+            balance: _amount,
+            bonusMP: bonusMP,
+            totalMP: bonusMP,
+            lastMint: block.timestamp,
+            lockUntil: block.timestamp + _secondsToLock,
+            epoch: currentEpoch,
+            mpLimitEpoch: mpLimitEpoch
+        });
 
         //update global storage
+        totalSupplyMP += bonusMP;
         totalSupplyBalance += _amount;
         currentEpochTotalExpiredMP += currentEpochExpiredMP;
         totalMPPerEpoch += mpPerEpoch;
@@ -220,7 +245,9 @@ contract StakeManager is Ownable {
     /**
      * leaves the staking pool and withdraws all funds;
      */
-    function unstake(uint256 _amount)
+    function unstake(
+        uint256 _amount
+    )
         external
         onlyVault
         onlyAccountInitialized(msg.sender)
@@ -261,30 +288,42 @@ contract StakeManager is Ownable {
      *
      * @dev Reverts when resulting locked time is not in range of [MIN_LOCKUP_PERIOD, MAX_LOCKUP_PERIOD]
      */
-    function lock(uint256 _secondsToIncreaseLock)
+    function lock(
+        uint256 _secondsToIncreaseLock
+    )
         external
         onlyVault
         onlyAccountInitialized(msg.sender)
         noPendingMigration
         finalizeEpoch
     {
+        _processAccount(accounts[msg.sender], currentEpoch);
         Account storage account = accounts[msg.sender];
-        _processAccount(account, currentEpoch);
         uint256 lockUntil = account.lockUntil;
         uint256 deltaTime;
         if (lockUntil < block.timestamp) {
+            //if unlocked, increase from now
             lockUntil = block.timestamp + _secondsToIncreaseLock;
             deltaTime = _secondsToIncreaseLock;
         } else {
+            //if locked, increase from lock until
             lockUntil += _secondsToIncreaseLock;
             deltaTime = lockUntil - block.timestamp;
         }
+        //checks if the lock time is in range
         if (deltaTime < MIN_LOCKUP_PERIOD || deltaTime > MAX_LOCKUP_PERIOD) {
             revert StakeManager__InvalidLockTime();
         }
-        _mintBonusMP(account, _secondsToIncreaseLock, 0);
+        //mints bonus multiplier points for seconds increased
+        uint256 bonusMP = _getMPToMint(account.balance, _secondsToIncreaseLock);
+
         //update account storage
         account.lockUntil = lockUntil;
+        account.bonusMP += bonusMP;
+        account.totalMP += bonusMP;
+        //update global storage
+        totalSupplyMP += bonusMP;
+        //account.lastMint = block.timestamp;
     }
 
     /**
@@ -309,6 +348,7 @@ contract StakeManager is Ownable {
         finalizeEpoch
     {
         _processAccount(accounts[_vault], _limitEpoch);
+        
     }
 
     /**
@@ -387,7 +427,9 @@ contract StakeManager is Ownable {
      * @notice Migrate account to new manager.
      * @param _acceptMigration true if wants to migrate, false if wants to leave
      */
-    function migrateTo(bool _acceptMigration)
+    function migrateTo(
+        bool _acceptMigration
+    )
         external
         onlyVault
         onlyAccountInitialized(msg.sender)
@@ -443,8 +485,11 @@ contract StakeManager is Ownable {
         uint256 mpDifference = account.totalMP;
         for (Epoch storage iEpoch = epochs[userEpoch]; userEpoch < _limitEpoch; userEpoch++) {
             //mint multiplier points to that epoch
+            console.log("userEpoch", userEpoch);
+            console.log("iEpoch.nextEpoch", iEpoch.nextEpoch);
             _mintMP(account, iEpoch.startTime + EPOCH_SIZE, iEpoch);
             uint256 userSupply = account.balance + account.totalMP;
+            console.log("iEpoch.nextEpoch (2)", iEpoch.nextEpoch);
             uint256 userEpochReward = Math.mulDiv(userSupply, iEpoch.epochReward, iEpoch.totalSupply);
             userReward += userEpochReward;
             iEpoch.epochReward -= userEpochReward;
@@ -460,35 +505,6 @@ contract StakeManager is Ownable {
         if (address(migration) != address(0)) {
             migration.increaseTotalMP(mpDifference);
         }
-    }
-
-    /**
-     * @notice Mint bonus multiplier points for given staking amount and time
-     * @dev if amount is greater 0, it increases difference of amount for current remaining lock time
-     * @dev if increased lock time, increases difference of total new balance for increased lock time
-     * @param account Account to mint multiplier points
-     * @param increasedLockTime increased lock time
-     * @param amount amount to stake
-     */
-    function _mintBonusMP(Account storage account, uint256 increasedLockTime, uint256 amount) private {
-        uint256 mpToMint;
-        if (amount > 0) {
-            mpToMint += amount; //initial multiplier points
-            if (block.timestamp < account.lockUntil) {
-                //increasing balance on locked account?
-                //bonus for remaining previously locked time of new balance.
-                mpToMint += _getMPToMint(amount, account.lockUntil - block.timestamp);
-            }
-        }
-        if (increasedLockTime > 0) {
-            //bonus for increased lock time
-            mpToMint += _getMPToMint(account.balance + amount, increasedLockTime);
-        }
-        //update storage
-        totalSupplyMP += mpToMint;
-        account.bonusMP += mpToMint;
-        account.totalMP += mpToMint;
-        account.lastMint = block.timestamp;
     }
 
     /**
@@ -510,7 +526,7 @@ contract StakeManager is Ownable {
         account.totalMP += mpToMint;
         totalSupplyMP += mpToMint;
 
-        //mp estimation
+        //mp estimation    
         epoch.estimatedMP -= mpToMint;
         pendingMPToBeMinted -= mpToMint;
     }

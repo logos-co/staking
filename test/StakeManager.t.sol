@@ -286,21 +286,77 @@ contract LockTest is StakeManagerTest {
 
     function test_UpdateLockupPeriod() public {
         uint256 minLockup = stakeManager.MIN_LOCKUP_PERIOD();
+        //start stake with minimum time allowed
+        uint256 i = 0;
+        console.log("call", i++);
         StakeVault userVault = _createStakingAccount(testUser, 1000, minLockup, 1000);
+        (, uint256 balance, uint256 bonusMP, uint256 totalMP,, uint256 currentLockUntil,,) =
+            stakeManager.accounts(address(userVault));
+        uint256 expectedLockUntil = block.timestamp + minLockup;
+        assertEq(currentLockUntil, expectedLockUntil, "Lock until did not match when first locked");
+        
+        //fast forward to 1 second before account is unlocked
+        vm.warp(block.timestamp + stakeManager.MIN_LOCKUP_PERIOD());
+        
+        //lock again with new minimum lockup period
+        //as account still locked, it should increase this lock from the previous lock until.
+        vm.startPrank(testUser);
+        console.log("call", i++);
+        userVault.lock(minLockup);
+        expectedLockUntil = currentLockUntil + minLockup;
+        //stakeManager.executeAccount(address(userVault), stakeManager.currentEpoch());
+        (, balance, bonusMP, totalMP,, currentLockUntil,,) = stakeManager.accounts(address(userVault));
+        assertEq(currentLockUntil, expectedLockUntil, "Lock until did not match when increased lock time while locked");
 
-        vm.warp(block.timestamp + stakeManager.MIN_LOCKUP_PERIOD() - 1);
-        stakeManager.executeAccount(address(userVault), 1);
-        (, uint256 balance, uint256 bonusMP, uint256 totalMP,, uint256 lockUntil,,) =
+        //fast forward to exact time when account is unlocked
+        vm.warp(currentLockUntil);
+
+        //locks again, but this time account is unlocked. next lock until is increased from block.timestamp.
+        console.log("call", i++);
+        userVault.lock(minLockup);
+        expectedLockUntil = block.timestamp + minLockup;
+        //As its the exact time the account gets unlocked, it would be the same as increasing from last lock period
+        assertEq(currentLockUntil + minLockup, expectedLockUntil, "sanity check did not match");
+        (, balance, bonusMP, totalMP,, currentLockUntil,,) = stakeManager.accounts(address(userVault));
+        assertEq(currentLockUntil, expectedLockUntil, "Lock until did not match when increased lock time while unlocked (exact time of unlock)");
+
+        console.log("call", i++);
+        vm.warp(block.timestamp + minLockup);
+        userVault.lock(minLockup);
+    }
+
+
+    function test_ExecAcc() public {
+        uint256 minLockup = stakeManager.MIN_LOCKUP_PERIOD();
+        //start stake with minimum time allowed
+        uint256 i = 0;
+        console.log("call", i++);
+        StakeVault userVault = _createStakingAccount(testUser, 1000, minLockup, 1000);
+        (, uint256 balance, uint256 bonusMP, uint256 totalMP,, uint256 currentLockUntil,,) =
             stakeManager.accounts(address(userVault));
 
-        vm.startPrank(testUser);
-        userVault.lock(minLockup - 1);
-        (, balance, bonusMP, totalMP,, lockUntil,,) = stakeManager.accounts(address(userVault));
-
-        assertEq(lockUntil, block.timestamp + minLockup);
 
         vm.warp(block.timestamp + stakeManager.MIN_LOCKUP_PERIOD());
-        userVault.lock(minLockup);
+        
+        console.log("call", i++);
+        stakeManager.executeAccount(address(userVault), stakeManager.currentEpoch());
+        
+        (, balance, bonusMP, totalMP,, currentLockUntil,,) = stakeManager.accounts(address(userVault));
+        
+
+        
+        vm.warp(currentLockUntil);
+
+        console.log("call", i++);
+        stakeManager.executeAccount(address(userVault), stakeManager.currentEpoch());
+        
+        
+        (, balance, bonusMP, totalMP,, currentLockUntil,,) = stakeManager.accounts(address(userVault));
+        
+
+        vm.warp(block.timestamp + minLockup);
+        console.log("call", i++);
+        stakeManager.executeAccount(address(userVault), stakeManager.currentEpoch());
     }
 
     function test_RevertWhen_InvalidUpdateLockupPeriod() public {
