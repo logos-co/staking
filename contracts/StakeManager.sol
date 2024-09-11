@@ -392,7 +392,6 @@ contract StakeManager is Ownable {
         onlyVault
         onlyAccountInitialized(msg.sender)
         onlyPendingMigration
-        finalizeEpoch
         returns (StakeManager newManager)
     {
         _processAccount(accounts[msg.sender], currentEpoch);
