@@ -476,11 +476,6 @@ contract StakeManager is Ownable {
         uint256 mpToMint;
         if (amount > 0) {
             mpToMint += amount; //initial multiplier points
-            if (block.timestamp < account.lockUntil) {
-                //increasing balance on locked account?
-                //bonus for remaining previously locked time of new balance.
-                mpToMint += _getMPToMint(amount, account.lockUntil - block.timestamp);
-            }
         }
         if (increasedLockTime > 0) {
             //bonus for increased lock time
