@@ -60,7 +60,6 @@ contract StakeManager is Ownable {
         uint256 epochReward;
         uint256 totalSupply;
         uint256 estimatedMP;
-        uint256 nextEpoch; //DEBUG: should be removed.
     }
 
     uint256 public constant EPOCH_SIZE = 1 weeks;
@@ -137,48 +136,21 @@ contract StakeManager is Ownable {
         _;
     }
 
-
-    function _finalizeEpoch() internal returns(bool finalized) {
-        Epoch storage epoch = epochs[currentEpoch];
-        uint256 epochEnd = epoch.startTime + EPOCH_SIZE;
-        finalized = block.timestamp >= epochEnd;
-        if(finalized) {
-            console.log("##### FINALIZE EPOCH", currentEpoch);
-            uint256 expiredMP = stakeRewardEstimate.getExpiredMP(currentEpoch);
-            if (expiredMP > 0) {
-                totalMPPerEpoch -= expiredMP;
-                stakeRewardEstimate.deleteExpiredMP(currentEpoch);
-            }
-            epoch.estimatedMP = totalMPPerEpoch - currentEpochTotalExpiredMP;
-            delete currentEpochTotalExpiredMP;
-            pendingMPToBeMinted += epoch.estimatedMP;
-
-            //finalize current epoch
-            epoch.epochReward = epochReward();
-            epoch.totalSupply = totalSupply();
-            pendingReward += epoch.epochReward;
-
-            //create new epoch
-            currentEpoch++;
-            console.log("##### NEW EPOCH", currentEpoch);
-            epochs[currentEpoch].startTime = epochEnd;
-            epochs[currentEpoch].nextEpoch = currentEpoch+1; //DEBUG: should be removed
-        }
-    }
-
     /**
      * @notice Process epoch if it has ended
      */
     modifier finalizeEpoch() {
-        if(address(migration) == address(0)) {
-            do {} while(_finalizeEpoch());    
+        //during migration the epoch should not be updated
+        if (address(migration) == address(0)) {
+            while (_finalizeEpoch()) {
+                continue;
+            }
         }
         _;
     }
 
     constructor(address _stakedToken, address _previousManager) {
         epochs[0].startTime = block.timestamp;
-        epochs[0].nextEpoch = 1; //DEBUG: should be removed
         previousManager = StakeManager(_previousManager);
         stakedToken = ERC20(_stakedToken);
         if (address(previousManager) != address(0)) {
@@ -323,15 +295,24 @@ contract StakeManager is Ownable {
         account.totalMP += bonusMP;
         //update global storage
         totalSupplyMP += bonusMP;
-        //account.lastMint = block.timestamp;
     }
 
     /**
      * @notice Release rewards for current epoch and increase epoch.
      * @dev only executes the prerequisite modifier finalizeEpoch
      */
-    function executeEpoch() external noPendingMigration finalizeEpoch {
-        return; //see modifier finalizeEpoch
+    function executeEpoch() external noPendingMigration {
+        while (_finalizeEpoch()) {
+            continue;
+        }
+    }
+
+    function executeEpoch(uint256 _limitEpoch) public noPendingMigration {
+        while (currentEpoch < _limitEpoch) {
+            if (!_finalizeEpoch()) {
+                break;
+            }
+        }
     }
 
     /**
@@ -348,7 +329,6 @@ contract StakeManager is Ownable {
         finalizeEpoch
     {
         _processAccount(accounts[_vault], _limitEpoch);
-        
     }
 
     /**
@@ -483,18 +463,17 @@ contract StakeManager is Ownable {
         uint256 userReward;
         uint256 userEpoch = account.epoch;
         uint256 mpDifference = account.totalMP;
-        for (Epoch storage iEpoch = epochs[userEpoch]; userEpoch < _limitEpoch; userEpoch++) {
+        while (userEpoch < _limitEpoch) {
+            Epoch storage iEpoch = epochs[userEpoch];
             //mint multiplier points to that epoch
-            console.log("userEpoch", userEpoch);
-            console.log("iEpoch.nextEpoch", iEpoch.nextEpoch);
             _mintMP(account, iEpoch.startTime + EPOCH_SIZE, iEpoch);
             uint256 userSupply = account.balance + account.totalMP;
-            console.log("iEpoch.nextEpoch (2)", iEpoch.nextEpoch);
             uint256 userEpochReward = Math.mulDiv(userSupply, iEpoch.epochReward, iEpoch.totalSupply);
             userReward += userEpochReward;
             iEpoch.epochReward -= userEpochReward;
             iEpoch.totalSupply -= userSupply;
             //TODO: remove epoch when iEpoch.totalSupply reaches zero
+            userEpoch++;
         }
         account.epoch = userEpoch;
         if (userReward > 0) {
@@ -505,6 +484,32 @@ contract StakeManager is Ownable {
         if (address(migration) != address(0)) {
             migration.increaseTotalMP(mpDifference);
         }
+    }
+
+    function _finalizeEpoch() internal returns (bool finalized) {
+        Epoch storage epoch = epochs[currentEpoch];
+        uint256 thisEpochEnd = epoch.startTime + EPOCH_SIZE;
+
+        if (block.timestamp < thisEpochEnd) {
+            return false;
+        }
+        uint256 expiredMP = stakeRewardEstimate.getExpiredMP(currentEpoch);
+        if (expiredMP > 0) {
+            totalMPPerEpoch -= expiredMP;
+            stakeRewardEstimate.deleteExpiredMP(currentEpoch);
+        }
+        epoch.estimatedMP = totalMPPerEpoch - currentEpochTotalExpiredMP;
+        delete currentEpochTotalExpiredMP;
+        pendingMPToBeMinted += epoch.estimatedMP;
+
+        //finalize current epoch
+        epoch.epochReward = epochReward();
+        epoch.totalSupply = totalSupply();
+        pendingReward += epoch.epochReward;
+
+        currentEpoch++;
+        epochs[currentEpoch].startTime = thisEpochEnd;
+        return true;
     }
 
     /**
@@ -526,7 +531,7 @@ contract StakeManager is Ownable {
         account.totalMP += mpToMint;
         totalSupplyMP += mpToMint;
 
-        //mp estimation    
+        //mp estimation
         epoch.estimatedMP -= mpToMint;
         pendingMPToBeMinted -= mpToMint;
     }
