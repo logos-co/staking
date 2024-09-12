@@ -205,9 +205,9 @@ contract StakeManager is Ownable {
         account.lockUntil = block.timestamp + _secondsToLock;
         account.epoch = currentEpoch; //starts in current epoch
         account.rewardAddress = StakeVault(msg.sender).owner();
+        _mintBonusMP(account, _secondsToLock, _amount); //TODO: remove this function competely
         account.balance = _amount;
         account.mpLimitEpoch = mpLimitEpoch;
-        _mintBonusMP(account, _secondsToLock, _amount);
 
         //update global storage
         totalSupplyBalance += _amount;
