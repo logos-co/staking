@@ -87,6 +87,38 @@ contract StakeTest is StakeManagerTest {
         stakeManager.stake(100, 1);
     }
 
+    function test_StakeWithLockBonusMP() public {
+        uint256 stakeAmount = 10_000;
+        uint256 lockTime = stakeManager.MIN_LOCKUP_PERIOD();
+
+        StakeVault userVault = _createStakingAccount(testUser, stakeAmount, 0, stakeAmount);
+
+        (, uint256 balance, uint256 bonusMP, uint256 totalMP,,,,) = stakeManager.accounts(address(userVault));
+        assertEq(balance, stakeAmount, "balance of user vault should be equal to stake amount after stake");
+        assertEq(bonusMP, stakeAmount, "bonusMP of user vault should be equal to stake amount after stake if no lock");
+        assertEq(totalMP, bonusMP, "totalMP of user vault should be equal to bonusMP after stake if no epochs passed");
+
+        vm.prank(testUser);
+        userVault.lock(lockTime);
+        uint256 estimatedBonusMp = stakeAmount + stakeManager.calculateMPToMint(stakeAmount, lockTime);
+
+        (, balance, bonusMP, totalMP,,,,) = stakeManager.accounts(address(userVault));
+        assertEq(balance, stakeAmount, "balance of user vault should be equal to stake amount after lock");
+        assertEq(bonusMP, estimatedBonusMp, "bonusMP of user vault should be equal to estimated bonusMP after lock");
+        assertEq(totalMP, bonusMP, "totalMP of user vault should be equal to bonusMP after lock if no epochs passed");
+
+        StakeVault userVault2 = _createStakingAccount(testUser, stakeAmount, lockTime, stakeAmount);
+
+        (, balance, bonusMP, totalMP,,,,) = stakeManager.accounts(address(userVault2));
+        assertEq(balance, stakeAmount, "balance of user vault should be equal to stake amount after stake locked");
+        assertEq(
+            bonusMP, estimatedBonusMp, "bonusMP of user vault should be equal to estimated bonusMP after stake locked"
+        );
+        assertEq(
+            totalMP, bonusMP, "totalMP of user vault should be equal to bonusMP after stake locked if no epochs passed"
+        );
+    }
+
     function test_RevertWhen_InvalidLockupPeriod() public {
         // ensure user has funds
         deal(stakeToken, testUser, 1000);
