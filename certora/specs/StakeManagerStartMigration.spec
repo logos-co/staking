@@ -1,3 +1,5 @@
+import "./shared.spec";
+
 using ERC20A as staked;
 using StakeManagerNew as newStakeManager;
 
@@ -10,21 +12,6 @@ methods {
 
   function _.migrationInitialize(uint256,uint256,uint256,uint256,uint256,uint256,uint256) external => DISPATCHER(true);
   function StakeManagerNew.totalSupplyBalance() external returns (uint256) envfree;
-}
-
-
-function getAccountMultiplierPoints(address addr) returns uint256 {
-  uint256 multiplierPoints;
-  _, _, _, multiplierPoints, _, _, _, _ = accounts(addr);
-
-  return multiplierPoints;
-}
-
-function getAccountBalance(address addr) returns uint256 {
-  uint256 balance;
-  _, balance, _, _, _, _, _, _ = accounts(addr);
-
-  return balance;
 }
 
 definition blockedWhenMigrating(method f) returns bool = (

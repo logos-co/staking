@@ -1,4 +1,7 @@
+import "./shared.spec";
+
 using ERC20A as staked;
+
 methods {
   function staked.balanceOf(address) external returns (uint256) envfree;
   function totalSupplyBalance() external returns (uint256) envfree;
@@ -20,27 +23,9 @@ function markAccountProccessed(address account, uint256 _limitEpoch) {
     accountProcessed[account] = to_mathint(_limitEpoch);
 }
 
-function getAccountLockUntil(address addr) returns uint256 {
-  uint256 lockUntil;
-  _, _, _, _, _, lockUntil, _, _ = accounts(addr);
-
-  return lockUntil;
-}
-
 hook Sstore accounts[KEY address addr].balance uint256 newValue (uint256 oldValue) {
     balanceChangedInEpoch[addr] = accountProcessed[addr];
 }
-
-definition requiresPreviousManager(method f) returns bool = (
-  f.selector == sig:migrationInitialize(uint256,uint256,uint256,uint256,uint256,uint256,uint256).selector ||
-  f.selector == sig:migrateFrom(address,bool,StakeManager.Account).selector ||
-  f.selector == sig:increaseTotalMP(uint256).selector
-  );
-
-definition requiresNextManager(method f) returns bool = (
-  f.selector == sig:migrateTo(bool).selector ||
-  f.selector == sig:transferNonPending().selector
-  );
 
 /*
   If a balance of an account has changed, the account should have been processed up to the `currentEpoch`.

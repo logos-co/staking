@@ -1,3 +1,5 @@
+import "./shared.spec";
+
 using ERC20A as staked;
 using StakeManager as stakeManager;
 
@@ -15,13 +17,6 @@ methods {
 function mulDivSummary(uint256 a, uint256 b, uint256 c) returns uint256 {
   require c != 0;
   return require_uint256(a*b/c);
-}
-
-function getAccountBalance(address addr) returns uint256 {
-  uint256 balance;
-  _, balance, _, _, _, _, _, _ = stakeManager.accounts(addr);
-
-  return balance;
 }
 
 definition isMigrationFunction(method f) returns bool = (
