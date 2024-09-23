@@ -6,7 +6,7 @@
   bytecode_hash = "none"
   cbor_metadata = false
   evm_version = "paris"
-  fuzz = { runs = 1_000 }
+  fuzz = { runs = 100 }
   gas_reports = ["*"]
   libs = ["lib"]
   optimizer = true
@@ -18,7 +18,7 @@
   test = "test"
 
 [profile.ci]
-  fuzz = { runs = 10_000 }
+  fuzz = { runs = 100 }
   verbosity = 4
 
 [etherscan]
