@@ -8,14 +8,14 @@
 | MAX_LOCKUP_PERIOD                                | 361             | 361    | 361    | 361    | 4       |
 | MIN_LOCKUP_PERIOD                                | 287             | 287    | 287    | 287    | 12      |
 | YEAR                                             | 263             | 263    | 263    | 263    | 1       |
-| accounts                                         | 1597            | 1597   | 1597   | 1597   | 12704   |
+| accounts                                         | 1597            | 1597   | 1597   | 1597   | 12050   |
 | calculateMPToMint                                | 740             | 740    | 740    | 740    | 4       |
 | currentEpoch                                     | 406             | 1691   | 2406   | 2406   | 28      |
 | epochEnd                                         | 627             | 643    | 627    | 4627   | 480     |
 | epochReward                                      | 1403            | 2903   | 1403   | 5903   | 3       |
-| executeAccount                                   | 28897           | 95856  | 95004  | 171987 | 10265   |
+| executeAccount                                   | 28897           | 95914  | 95004  | 171987 | 9611    |
 | executeEpoch                                     | 23436           | 170888 | 187183 | 204283 | 419     |
-| isVault                                          | 540             | 572    | 540    | 2540   | 7762    |
+| isVault                                          | 540             | 575    | 540    | 2540   | 7108    |
 | lock                                             | 23840           | 23840  | 23840  | 23840  | 1       |
 | migrateTo                                        | 23869           | 23875  | 23875  | 23881  | 2       |
 | migration                                        | 439             | 1439   | 1439   | 2439   | 4       |
@@ -27,7 +27,7 @@
 | setVault                                         | 46239           | 46239  | 46239  | 46239  | 125     |
 | stake                                            | 23983           | 23983  | 23983  | 23983  | 1       |
 | stakeRewardEstimate                              | 436             | 2269   | 2436   | 2436   | 12      |
-| stakedToken                                      | 273             | 273    | 273    | 273    | 7778    |
+| stakedToken                                      | 273             | 273    | 273    | 273    | 7124    |
 | startMigration                                   | 108037          | 108045 | 108049 | 108049 | 3       |
 | totalSupply                                      | 740             | 1921   | 2740   | 2740   | 22      |
 | totalSupplyBalance                               | 385             | 1785   | 2385   | 2385   | 20      |
@@ -52,8 +52,8 @@
 | acceptMigration                              | 35258           | 35258  | 35258  | 35258  | 2       |
 | leave                                        | 35244           | 35244  | 35244  | 35244  | 1       |
 | lock                                         | 45192           | 73900  | 66395  | 158442 | 7       |
-| owner                                        | 362             | 362    | 362    | 362    | 7761    |
-| stake                                        | 27265           | 268815 | 267631 | 353862 | 7766    |
+| owner                                        | 362             | 362    | 362    | 362    | 7107    |
+| stake                                        | 27265           | 268924 | 267631 | 353862 | 7112    |
 | stakedToken                                  | 212             | 212    | 212    | 212    | 2       |
 | unstake                                      | 42163           | 92598  | 80285  | 207456 | 11      |
 
@@ -63,7 +63,7 @@
 | Deployment Cost                                  | Deployment Size |        |        |        |         |
 | 0                                                | 0               |        |        |        |         |
 | Function Name                                    | min             | avg    | median | max    | # calls |
-| createVault                                      | 696531          | 696531 | 696531 | 696531 | 7765    |
+| createVault                                      | 696531          | 696531 | 696531 | 696531 | 7111    |
 | setStakeManager                                  | 23710           | 26669  | 26076  | 30222  | 3       |
 | stakeManager                                     | 368             | 1868   | 2368   | 2368   | 4       |
 
@@ -73,8 +73,8 @@
 | Deployment Cost                                                           | Deployment Size |       |        |       |         |
 | 0                                                                         | 0               |       |        |       |         |
 | Function Name                                                             | min             | avg   | median | max   | # calls |
-| approve                                                                   | 46175           | 46198 | 46199  | 46211 | 7761    |
-| balanceOf                                                                 | 561             | 617   | 561    | 2561  | 21747   |
+| approve                                                                   | 46175           | 46198 | 46199  | 46211 | 7107    |
+| balanceOf                                                                 | 561             | 621   | 561    | 2561  | 20439   |
 
 
 | script/Deploy.s.sol:Deploy contract |                 |         |         |         |         |
