@@ -142,7 +142,7 @@ $ forge test
 Formats, generates snapshot and gas report:
 
 ```sh
-pnpm run adorno
+pnpm adorno
 ```
 
 ## License
