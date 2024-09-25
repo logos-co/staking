@@ -662,18 +662,34 @@ contract UserFlowsTest is StakeManagerTest {
         assertEq(stakeManager.totalSupplyBalance(), 0);
     }
 
-    function test_PendingMPToBeMintedCannotBeGreaterThanTotalSupplyMP(uint8 accountNum) public {
-        uint256 stakeAmount = 10_000_000;
-
+    function test_PendingMPToBeMintedCannotBeGreaterThanTotalSupplyMP(
+        uint8 randomStakeMultiplier,
+        uint128 randomStakeAddition
+    )
+        public
+    {
+        uint8 accountNum = 5;
+        uint256 minimumPossibleStake = 53; //less than this the stake per epoch of the account would be 0
+        uint256 baseStakeAmount =
+            (minimumPossibleStake * (uint256(randomStakeMultiplier) + 1)) + uint256(randomStakeAddition);
+        uint256 epochsAmountToReachCap = 0;
         for (uint256 i = 0; i <= accountNum; i++) {
+            uint256 thisAccStake = baseStakeAmount + (i * (10 ^ i * baseStakeAmount)); //changes the amount of stake of
+                // each account so we have mixed amounts of stake
             userVaults.push(
-                _createStakingAccount(makeAddr(string(abi.encode(keccak256(abi.encode(accountNum))))), stakeAmount, 0)
+                _createStakingAccount(makeAddr(string(abi.encode(keccak256(abi.encode(accountNum))))), thisAccStake, 0)
             );
+            uint256 thisAccReachCapIn = stakeManager.calculateMPToMint(
+                thisAccStake, stakeManager.MAX_BOOST() * stakeManager.YEAR()
+            ) / stakeManager.calculateMPToMint(thisAccStake, stakeManager.EPOCH_SIZE());
+            if (thisAccReachCapIn > epochsAmountToReachCap) {
+                epochsAmountToReachCap = thisAccReachCapIn; //uses the amount to reach cap from the account that takes
+                    // longer to reach cap
+            }
         }
 
-        uint256 epochsAmountToReachCap = 1;
-
-        for (uint256 i = 0; i < epochsAmountToReachCap; i++) {
+        //tests up to epochs to reach MAX_BOOST + 10 epochs
+        for (uint256 i = 0; i < epochsAmountToReachCap + 10; i++) {
             vm.warp(stakeManager.epochEnd());
             stakeManager.executeEpoch();
             uint256 pendingMPToBeMintedBefore = stakeManager.pendingMPToBeMinted();
