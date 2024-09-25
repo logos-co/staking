@@ -744,6 +744,64 @@ contract MigrationStakeManagerTest is StakeManagerTest {
 }
 
 contract ExecuteEpochTest is MigrationStakeManagerTest {
+    function test_ExecuteEpochExecuteEpochAfterEnd() public {
+        StakeVault userVault = _createStakingAccount(makeAddr("testUser"), 100_000, 0);
+
+        vm.warp(stakeManager.epochEnd() + (stakeManager.EPOCH_SIZE() / 2));
+        stakeManager.executeEpoch();
+        stakeManager.executeAccount(address(userVault), stakeManager.currentEpoch());
+        vm.warp(stakeManager.epochEnd());
+
+        stakeManager.executeEpoch();
+        stakeManager.executeAccount(address(userVault), stakeManager.currentEpoch());
+
+        vm.warp(stakeManager.epochEnd() + (stakeManager.EPOCH_SIZE() * 2));
+        stakeManager.executeEpoch();
+        stakeManager.executeAccount(address(userVault), stakeManager.currentEpoch());
+    }
+
+    function test_ExecuteEpochExecuteEpochExecuteAccountAfterManyEpochs() public {
+        StakeVault userVault = _createStakingAccount(makeAddr("testUser"), 100_000, 0);
+
+        for (uint256 i = 0; i < 10; i++) {
+            vm.warp(stakeManager.epochEnd());
+            stakeManager.executeEpoch();
+        }
+        stakeManager.executeAccount(address(userVault), stakeManager.currentEpoch());
+    }
+
+    function test_ExecuteEpochExecuteEpochExecuteAccountAfterManyEpochsWithBrokenTime() public {
+        StakeVault userVault = _createStakingAccount(makeAddr("testUser"), 100_000, 0);
+
+        for (uint256 i = 0; i < 10; i++) {
+            vm.warp(stakeManager.epochEnd() + (stakeManager.EPOCH_SIZE() / 10 - i));
+            stakeManager.executeEpoch();
+        }
+        stakeManager.executeAccount(address(userVault), stakeManager.currentEpoch());
+    }
+
+    function test_ExecuteEpochExecuteAccountAfterEpochEnd() public {
+        StakeVault userVault = _createStakingAccount(makeAddr("testUser"), 100_000, 0);
+
+        vm.warp(stakeManager.epochEnd() + (stakeManager.EPOCH_SIZE() / 2));
+        stakeManager.executeAccount(address(userVault), stakeManager.currentEpoch());
+
+        vm.warp(stakeManager.epochEnd());
+        stakeManager.executeAccount(address(userVault), stakeManager.currentEpoch());
+
+        vm.warp(stakeManager.epochEnd() + (stakeManager.EPOCH_SIZE() * 2));
+        stakeManager.executeAccount(address(userVault), stakeManager.currentEpoch());
+    }
+
+    function test_ExecuteEpochExecuteAccountAfterManyEpochsWithBrokenTime() public {
+        StakeVault userVault = _createStakingAccount(makeAddr("testUser"), 100_000, 0);
+
+        for (uint256 i = 0; i < 10; i++) {
+            vm.warp(stakeManager.epochEnd() + (stakeManager.EPOCH_SIZE() / 10 - i));
+            stakeManager.executeAccount(address(userVault), stakeManager.currentEpoch());
+        }
+    }
+
     function test_ExecuteEpochShouldNotIncreaseEpochBeforeEnd() public {
         assertEq(stakeManager.currentEpoch(), 0);
 
