@@ -19,6 +19,7 @@ definition blockedWhenMigrating(method f) returns bool = (
       f.selector == sig:unstake(uint256).selector ||
       f.selector == sig:lock(uint256).selector ||
       f.selector == sig:executeEpoch().selector ||
+      f.selector == sig:executeEpoch(uint256).selector ||
       f.selector == sig:startMigration(address).selector ||
       f.selector == sig:migrationInitialize(uint256,uint256,uint256,uint256,uint256,uint256,uint256).selector
       );
