@@ -138,27 +138,30 @@ contract StakeManager is Ownable {
     /**
      * @notice Process epoch if it has ended
      */
-    modifier finalizeEpoch() {
-        if (block.timestamp >= epochEnd() && address(migration) == address(0)) {
+    function finalizeEpoch() private {
+        if (address(migration) != address(0)) {
+            return;
+        }
+        Epoch storage thisEpoch = epochs[currentEpoch];
+        if (block.timestamp >= thisEpoch.startTime + EPOCH_SIZE) {
             uint256 expiredMP = stakeRewardEstimate.getExpiredMP(currentEpoch);
             if (expiredMP > 0) {
                 totalMPPerEpoch -= expiredMP;
                 stakeRewardEstimate.deleteExpiredMP(currentEpoch);
             }
-            epochs[currentEpoch].estimatedMP = totalMPPerEpoch - currentEpochTotalExpiredMP;
+            thisEpoch.estimatedMP = totalMPPerEpoch - currentEpochTotalExpiredMP;
             delete currentEpochTotalExpiredMP;
-            pendingMPToBeMinted += epochs[currentEpoch].estimatedMP;
+            pendingMPToBeMinted += thisEpoch.estimatedMP;
 
             //finalize current epoch
-            epochs[currentEpoch].epochReward = epochReward();
-            epochs[currentEpoch].totalSupply = totalSupply();
-            pendingReward += epochs[currentEpoch].epochReward;
+            thisEpoch.epochReward = epochReward();
+            thisEpoch.totalSupply = totalSupply();
+            pendingReward += thisEpoch.epochReward;
 
             //create new epoch
             currentEpoch++;
-            epochs[currentEpoch].startTime = block.timestamp;
+            epochs[currentEpoch].startTime = thisEpoch.startTime + EPOCH_SIZE;
         }
-        _;
     }
 
     constructor(address _stakedToken, address _previousManager) {
@@ -181,7 +184,8 @@ contract StakeManager is Ownable {
      * @dev Reverts when account has already staked funds.
      * @dev Reverts when amount staked results in less than 1 MP per epoch.
      */
-    function stake(uint256 _amount, uint256 _secondsToLock) external onlyVault noPendingMigration finalizeEpoch {
+    function stake(uint256 _amount, uint256 _secondsToLock) external onlyVault noPendingMigration {
+        finalizeEpoch();
         Account storage account = accounts[msg.sender];
         if (account.balance > 0 || account.lockUntil != 0) {
             revert StakeManager__AlreadyStaked();
@@ -220,13 +224,8 @@ contract StakeManager is Ownable {
     /**
      * leaves the staking pool and withdraws all funds;
      */
-    function unstake(uint256 _amount)
-        external
-        onlyVault
-        onlyAccountInitialized(msg.sender)
-        noPendingMigration
-        finalizeEpoch
-    {
+    function unstake(uint256 _amount) external onlyVault onlyAccountInitialized(msg.sender) noPendingMigration {
+        finalizeEpoch();
         Account storage account = accounts[msg.sender];
         if (_amount > account.balance) {
             revert StakeManager__InsufficientFunds();
@@ -266,8 +265,8 @@ contract StakeManager is Ownable {
         onlyVault
         onlyAccountInitialized(msg.sender)
         noPendingMigration
-        finalizeEpoch
     {
+        finalizeEpoch();
         Account storage account = accounts[msg.sender];
         _processAccount(account, currentEpoch);
         uint256 lockUntil = account.lockUntil;
@@ -291,8 +290,8 @@ contract StakeManager is Ownable {
      * @notice Release rewards for current epoch and increase epoch.
      * @dev only executes the prerequisite modifier finalizeEpoch
      */
-    function executeEpoch() external noPendingMigration finalizeEpoch {
-        return; //see modifier finalizeEpoch
+    function executeEpoch() external noPendingMigration {
+        finalizeEpoch();
     }
 
     /**
@@ -300,14 +299,8 @@ contract StakeManager is Ownable {
      * @param _vault Referred account
      * @param _limitEpoch Until what epoch it should be executed
      */
-    function executeAccount(
-        address _vault,
-        uint256 _limitEpoch
-    )
-        external
-        onlyAccountInitialized(_vault)
-        finalizeEpoch
-    {
+    function executeAccount(address _vault, uint256 _limitEpoch) external onlyAccountInitialized(_vault) {
+        finalizeEpoch();
         _processAccount(accounts[_vault], _limitEpoch);
     }
 
@@ -323,7 +316,8 @@ contract StakeManager is Ownable {
      * @notice starts migration to new StakeManager
      * @param _migration new StakeManager
      */
-    function startMigration(StakeManager _migration) external onlyOwner noPendingMigration finalizeEpoch {
+    function startMigration(StakeManager _migration) external onlyOwner noPendingMigration {
+        finalizeEpoch();
         if (_migration == this || address(_migration) == address(0)) {
             revert StakeManager__InvalidMigration();
         }
