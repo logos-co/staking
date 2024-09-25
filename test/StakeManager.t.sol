@@ -455,6 +455,49 @@ contract ExecuteAccountTest is StakeManagerTest {
         uint256 currentEpoch = stakeManager.currentEpoch();
 
         vm.expectRevert(StakeManager.StakeManager__InvalidLimitEpoch.selector);
+        stakeManager.executeEpoch(currentEpoch + 1);
+
+        vm.expectRevert(StakeManager.StakeManager__InvalidLimitEpoch.selector);
+        stakeManager.executeAccount(address(userVault), currentEpoch + 1);
+
+        vm.warp(stakeManager.epochEnd() - 1);
+
+        vm.expectRevert(StakeManager.StakeManager__InvalidLimitEpoch.selector);
+        stakeManager.executeEpoch(currentEpoch + 1);
+
+        vm.expectRevert(StakeManager.StakeManager__InvalidLimitEpoch.selector);
+        stakeManager.executeAccount(address(userVault), currentEpoch + 1);
+
+        vm.warp(stakeManager.epochEnd());
+
+        stakeManager.executeAccount(address(userVault), currentEpoch + 1);
+        stakeManager.executeEpoch(currentEpoch + 1);
+
+        currentEpoch++;
+
+        vm.expectRevert(StakeManager.StakeManager__InvalidLimitEpoch.selector);
+        stakeManager.executeEpoch(currentEpoch + 1);
+
+        vm.expectRevert(StakeManager.StakeManager__InvalidLimitEpoch.selector);
+        stakeManager.executeAccount(address(userVault), currentEpoch + 1);
+
+        vm.warp(stakeManager.epochEnd() + stakeManager.EPOCH_SIZE() - 1);
+
+        vm.expectRevert(StakeManager.StakeManager__InvalidLimitEpoch.selector);
+        stakeManager.executeEpoch(currentEpoch + 2);
+
+        vm.expectRevert(StakeManager.StakeManager__InvalidLimitEpoch.selector);
+        stakeManager.executeAccount(address(userVault), currentEpoch + 2);
+
+        stakeManager.executeAccount(address(userVault), currentEpoch + 1);
+        stakeManager.executeEpoch(currentEpoch + 1);
+
+        currentEpoch++;
+
+        vm.expectRevert(StakeManager.StakeManager__InvalidLimitEpoch.selector);
+        stakeManager.executeEpoch(currentEpoch + 1);
+
+        vm.expectRevert(StakeManager.StakeManager__InvalidLimitEpoch.selector);
         stakeManager.executeAccount(address(userVault), currentEpoch + 1);
     }
 
@@ -744,6 +787,34 @@ contract MigrationStakeManagerTest is StakeManagerTest {
 }
 
 contract ExecuteEpochTest is MigrationStakeManagerTest {
+    function test_ExecuteEpochNewEpoch() public {
+        uint256 firstEpochEnd = stakeManager.epochEnd();
+        assertEq(stakeManager.currentEpoch(), 0, "Epoch not 0 at start of test");
+        assertEq(stakeManager.newEpoch(), 0, "New epoch not 0 at start of test");
+        stakeManager.executeEpoch();
+        assertEq(stakeManager.currentEpoch(), 0, "Epoch should not increase if no time passed since start");
+
+        vm.warp(firstEpochEnd - 1);
+        assertEq(stakeManager.newEpoch(), 0, "New epoch not 0 if 1 second before epoch end");
+        stakeManager.executeEpoch();
+        assertEq(stakeManager.currentEpoch(), 0, "Epoch should not increase if 1 second before epoch end");
+
+        vm.warp(firstEpochEnd);
+        assertEq(stakeManager.newEpoch(), 1, "New epoch should be 1 if exactly at epochEnd");
+        stakeManager.executeEpoch();
+        assertEq(stakeManager.currentEpoch(), 1, "Current epoch should increased to 1 if exactly at epochEnd of 0");
+
+        vm.warp(firstEpochEnd + 1);
+        assertEq(stakeManager.newEpoch(), 1, "New epoch should be 1 if 1 second after epochend of 1");
+        stakeManager.executeEpoch();
+        assertEq(stakeManager.currentEpoch(), 1, "Current epoch should increase if 1 second after epochend of 1");
+
+        vm.warp(firstEpochEnd + (stakeManager.EPOCH_SIZE() * 99));
+        assertEq(stakeManager.newEpoch(), 100);
+        stakeManager.executeEpoch();
+        assertEq(stakeManager.currentEpoch(), 100);
+    }
+
     function test_ExecuteEpochExecuteEpochAfterEnd() public {
         StakeVault userVault = _createStakingAccount(makeAddr("testUser"), 100_000, 0);
 
@@ -770,6 +841,25 @@ contract ExecuteEpochTest is MigrationStakeManagerTest {
         stakeManager.executeAccount(address(userVault), stakeManager.currentEpoch());
     }
 
+    function test_ExecuteEpochExecuteEpochExecuteAccountAfterManyEpochsJumoMany() public {
+        StakeVault userVault = _createStakingAccount(makeAddr("testUser"), 100_000, 0);
+
+        for (uint256 i = 0; i < 10; i++) {
+            vm.warp(stakeManager.epochEnd());
+        }
+        stakeManager.executeEpoch();
+        stakeManager.executeAccount(address(userVault), stakeManager.currentEpoch());
+    }
+
+    function test_ExecuteEpochExecuteAccountAfterManyEpochsJumoMany() public {
+        StakeVault userVault = _createStakingAccount(makeAddr("testUser"), 100_000, 0);
+
+        for (uint256 i = 0; i < 10; i++) {
+            vm.warp(stakeManager.epochEnd());
+        }
+        stakeManager.executeAccount(address(userVault));
+    }
+
     function test_ExecuteEpochExecuteEpochExecuteAccountAfterManyEpochsWithBrokenTime() public {
         StakeVault userVault = _createStakingAccount(makeAddr("testUser"), 100_000, 0);
 
@@ -778,6 +868,25 @@ contract ExecuteEpochTest is MigrationStakeManagerTest {
             stakeManager.executeEpoch();
         }
         stakeManager.executeAccount(address(userVault), stakeManager.currentEpoch());
+    }
+
+    function test_ExecuteEpochExecuteEpochExecuteAccountAfterManyEpochsWithBrokenTimeJumpMany() public {
+        StakeVault userVault = _createStakingAccount(makeAddr("testUser"), 100_000, 0);
+
+        for (uint256 i = 0; i < 10; i++) {
+            vm.warp(stakeManager.epochEnd() + (stakeManager.EPOCH_SIZE() / 10 - i));
+        }
+        stakeManager.executeEpoch();
+        stakeManager.executeAccount(address(userVault), stakeManager.currentEpoch());
+    }
+
+    function test_ExecuteEpochExecuteAccountAfterManyEpochsWithBrokenTimeJumpMany() public {
+        StakeVault userVault = _createStakingAccount(makeAddr("testUser"), 100_000, 0);
+
+        for (uint256 i = 0; i < 10; i++) {
+            vm.warp(stakeManager.epochEnd() + (stakeManager.EPOCH_SIZE() / 10 - i));
+        }
+        stakeManager.executeAccount(address(userVault));
     }
 
     function test_ExecuteEpochExecuteAccountAfterEpochEnd() public {
