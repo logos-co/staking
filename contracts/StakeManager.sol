@@ -74,6 +74,7 @@ contract StakeManager is Ownable {
 
     uint256 public currentEpoch;
     uint256 public pendingReward;
+    uint256 public immutable startTime;
 
     uint256 public pendingMPToBeMinted;
     uint256 public totalSupplyMP;
@@ -140,30 +141,33 @@ contract StakeManager is Ownable {
      * @param _limitEpoch Until what epoch it should be executed
      */
     function finalizeEpoch(uint256 _limitEpoch) private {
-        while (currentEpoch < _limitEpoch) {
-            Epoch storage thisEpoch = epochs[currentEpoch];
-            uint256 expiredMP = stakeRewardEstimate.getExpiredMP(currentEpoch);
+        uint256 tempCurrentEpoch = currentEpoch;
+        while (tempCurrentEpoch < _limitEpoch) {
+            Epoch storage thisEpoch = epochs[tempCurrentEpoch];
+            uint256 expiredMP = stakeRewardEstimate.getExpiredMP(tempCurrentEpoch);
             if (expiredMP > 0) {
                 totalMPPerEpoch -= expiredMP;
-                stakeRewardEstimate.deleteExpiredMP(currentEpoch);
+                stakeRewardEstimate.deleteExpiredMP(tempCurrentEpoch);
             }
             thisEpoch.estimatedMP = totalMPPerEpoch - currentEpochTotalExpiredMP;
             delete currentEpochTotalExpiredMP;
             pendingMPToBeMinted += thisEpoch.estimatedMP;
 
             //finalize current epoch
-            thisEpoch.epochReward = epochReward();
+            if (tempCurrentEpoch == currentEpoch) {
+                thisEpoch.epochReward = epochReward();
+                pendingReward += thisEpoch.epochReward;
+            }
             thisEpoch.totalSupply = totalSupply();
-            pendingReward += thisEpoch.epochReward;
 
             //create new epoch
-            currentEpoch++;
-            epochs[currentEpoch].startTime = thisEpoch.startTime + EPOCH_SIZE;
+            tempCurrentEpoch++;
         }
+        currentEpoch = tempCurrentEpoch;
     }
 
     constructor(address _stakedToken, address _previousManager) {
-        epochs[0].startTime = block.timestamp;
+        startTime = (_previousManager == address(0)) ? block.timestamp : StakeManager(_previousManager).startTime();
         previousManager = StakeManager(_previousManager);
         stakedToken = ERC20(_stakedToken);
         if (address(previousManager) != address(0)) {
@@ -351,7 +355,7 @@ contract StakeManager is Ownable {
             currentEpoch,
             totalSupplyMP,
             totalSupplyBalance,
-            epochs[currentEpoch].startTime,
+            startTime,
             totalMPPerEpoch,
             pendingMPToBeMinted,
             currentEpochTotalExpiredMP
@@ -364,13 +368,13 @@ contract StakeManager is Ownable {
      * @param _currentEpoch epoch of old manager
      * @param _totalSupplyMP MP supply on old manager
      * @param _totalSupplyBalance stake supply on old manager
-     * @param _epochStartTime epoch start time of old manager
+     * @param _startTime start time of old manager
      */
     function migrationInitialize(
         uint256 _currentEpoch,
         uint256 _totalSupplyMP,
         uint256 _totalSupplyBalance,
-        uint256 _epochStartTime,
+        uint256 _startTime,
         uint256 _totalMPPerEpoch,
         uint256 _pendingMPToBeMinted,
         uint256 _currentEpochExpiredMP
@@ -382,10 +386,12 @@ contract StakeManager is Ownable {
         if (currentEpoch > 0) {
             revert StakeManager__AlreadyProcessedEpochs();
         }
+        if (_startTime != startTime) {
+            revert StakeManager__InvalidMigration();
+        }
         currentEpoch = _currentEpoch;
         totalSupplyMP = _totalSupplyMP;
         totalSupplyBalance = _totalSupplyBalance;
-        epochs[currentEpoch].startTime = _epochStartTime;
         totalMPPerEpoch = _totalMPPerEpoch;
         pendingMPToBeMinted = _pendingMPToBeMinted;
         currentEpochTotalExpiredMP = _currentEpochExpiredMP;
@@ -458,7 +464,7 @@ contract StakeManager is Ownable {
         while (userEpoch < _limitEpoch) {
             Epoch storage iEpoch = epochs[userEpoch];
             //mint multiplier points to that epoch
-            _mintMP(account, iEpoch.startTime + EPOCH_SIZE, iEpoch);
+            _mintMP(account, startTime + (EPOCH_SIZE * (userEpoch + 1)), iEpoch);
             uint256 userSupply = account.balance + account.totalMP;
             uint256 userEpochReward = Math.mulDiv(userSupply, iEpoch.epochReward, iEpoch.totalSupply);
             userReward += userEpochReward;
@@ -608,7 +614,7 @@ contract StakeManager is Ownable {
      * @return _epochEnd end time of current epoch
      */
     function epochEnd() public view returns (uint256 _epochEnd) {
-        return epochs[currentEpoch].startTime + EPOCH_SIZE;
+        return startTime + (EPOCH_SIZE * (currentEpoch + 1));
     }
 
     /**
@@ -616,7 +622,6 @@ contract StakeManager is Ownable {
      * @return _newEpoch the number of the epoch after all epochs that can be processed
      */
     function newEpoch() public view returns (uint256 _newEpoch) {
-        _newEpoch = currentEpoch;
-        _newEpoch = _newEpoch + ((block.timestamp - epochs[_newEpoch].startTime) / EPOCH_SIZE);
+        _newEpoch = (block.timestamp - startTime) / EPOCH_SIZE;
     }
 }
