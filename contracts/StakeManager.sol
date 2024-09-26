@@ -188,8 +188,7 @@ contract StakeManager is Ownable {
      */
     function stake(uint256 _amount, uint256 _secondsToLock) external onlyVault noPendingMigration {
         finalizeEpoch(newEpoch());
-        Account storage account = accounts[msg.sender];
-        if (account.balance > 0 || account.lockUntil != 0) {
+        if (accounts[msg.sender].balance > 0) {
             revert StakeManager__AlreadyStaked();
         }
         if (_secondsToLock != 0 && (_secondsToLock < MIN_LOCKUP_PERIOD || _secondsToLock > MAX_LOCKUP_PERIOD)) {
@@ -206,16 +205,26 @@ contract StakeManager is Ownable {
         uint256 epochAmountToReachMpLimit = (maxMpToMint) / mpPerEpoch;
         uint256 mpLimitEpoch = currentEpoch + epochAmountToReachMpLimit;
         uint256 lastEpochAmountToMint = ((mpPerEpoch * (epochAmountToReachMpLimit + 1)) - maxMpToMint);
+        uint256 bonusMP = _amount;
+        if (_secondsToLock > 0) {
+            //bonus for lock time
+            bonusMP += _getMPToMint(_amount, _secondsToLock);
+        }
 
         // account initialization
-        account.lockUntil = block.timestamp + _secondsToLock;
-        account.epoch = currentEpoch; //starts in current epoch
-        account.rewardAddress = StakeVault(msg.sender).owner();
-        _mintBonusMP(account, _secondsToLock, _amount); //TODO: remove this function competely
-        account.balance = _amount;
-        account.mpLimitEpoch = mpLimitEpoch;
+        accounts[msg.sender] = Account({
+            rewardAddress: StakeVault(msg.sender).owner(),
+            balance: _amount,
+            bonusMP: bonusMP,
+            totalMP: bonusMP,
+            lastMint: block.timestamp,
+            lockUntil: block.timestamp + _secondsToLock,
+            epoch: currentEpoch,
+            mpLimitEpoch: mpLimitEpoch
+        });
 
         //update global storage
+        totalSupplyMP += bonusMP;
         totalSupplyBalance += _amount;
         currentEpochTotalExpiredMP += currentEpochExpiredMP;
         totalMPPerEpoch += mpPerEpoch;
@@ -273,18 +282,27 @@ contract StakeManager is Ownable {
         uint256 lockUntil = account.lockUntil;
         uint256 deltaTime;
         if (lockUntil < block.timestamp) {
+            //if unlocked, increase from now
             lockUntil = block.timestamp + _secondsToIncreaseLock;
             deltaTime = _secondsToIncreaseLock;
         } else {
+            //if locked, increase from lock until
             lockUntil += _secondsToIncreaseLock;
             deltaTime = lockUntil - block.timestamp;
         }
+        //checks if the lock time is in range
         if (deltaTime < MIN_LOCKUP_PERIOD || deltaTime > MAX_LOCKUP_PERIOD) {
             revert StakeManager__InvalidLockTime();
         }
-        _mintBonusMP(account, _secondsToIncreaseLock, 0);
+        //mints bonus multiplier points for seconds increased
+        uint256 bonusMP = _getMPToMint(account.balance, _secondsToIncreaseLock);
+
         //update account storage
         account.lockUntil = lockUntil;
+        account.bonusMP += bonusMP;
+        account.totalMP += bonusMP;
+        //update global storage
+        totalSupplyMP += bonusMP;
     }
 
     /**
@@ -485,30 +503,6 @@ contract StakeManager is Ownable {
             mpDifference = account.totalMP - mpDifference;
             migration.increaseTotalMP(mpDifference);
         }
-    }
-
-    /**
-     * @notice Mint bonus multiplier points for given staking amount and time
-     * @dev if amount is greater 0, it increases difference of amount for current remaining lock time
-     * @dev if increased lock time, increases difference of total new balance for increased lock time
-     * @param account Account to mint multiplier points
-     * @param increasedLockTime increased lock time
-     * @param amount amount to stake
-     */
-    function _mintBonusMP(Account storage account, uint256 increasedLockTime, uint256 amount) private {
-        uint256 mpToMint;
-        if (amount > 0) {
-            mpToMint += amount; //initial multiplier points
-        }
-        if (increasedLockTime > 0) {
-            //bonus for increased lock time
-            mpToMint += _getMPToMint(account.balance + amount, increasedLockTime);
-        }
-        //update storage
-        totalSupplyMP += mpToMint;
-        account.bonusMP += mpToMint;
-        account.totalMP += mpToMint;
-        account.lastMint = block.timestamp;
     }
 
     /**
