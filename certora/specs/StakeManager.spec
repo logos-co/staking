@@ -85,6 +85,12 @@ invariant highEpochsAreNull(uint256 epochNumber)
     m -> !requiresPreviousManager(m) && !requiresNextManager(m)
   }
 
+invariant accountMPIsZeroIfBalanceIsZero(address addr)
+  to_mathint(getAccountBalance(addr)) == 0 => to_mathint(getAccountCurrentMultiplierPoints(addr)) == 0
+  filtered {
+    f -> f.selector != sig:migrateFrom(address,bool,StakeManager.Account).selector
+  }
+
 invariant InitialMPIsNeverSmallerThanBalance(address addr)
   to_mathint(getAccountBonusMultiplierPoints(addr)) >= to_mathint(getAccountBalance(addr))
   filtered {
@@ -126,6 +132,7 @@ rule stakingMintsMultiplierPoints1To1Ratio {
 
   requireInvariant InitialMPIsNeverSmallerThanBalance(e.msg.sender);
   requireInvariant CurrentMPIsNeverSmallerThanInitialMP(e.msg.sender);
+  requireInvariant accountMPIsZeroIfBalanceIsZero(e.msg.sender);
 
   require getAccountLockUntil(e.msg.sender) <= e.block.timestamp;
 
