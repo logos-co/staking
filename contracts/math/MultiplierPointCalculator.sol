@@ -3,34 +3,16 @@ pragma solidity ^0.8.18;
 
 import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 
-type MultiplierPoints is uint256;
+import { MultiplierPoint } from "./MultiplierPoint.sol";
 
-using { add as + } for MultiplierPoints global;
-using { sub as - } for MultiplierPoints global;
-using { lt as < } for MultiplierPoints global;
-using { gt as > } for MultiplierPoints global;
-
-function add(MultiplierPoints a, MultiplierPoints b) pure returns (MultiplierPoints) {
-    return MultiplierPoints.wrap(MultiplierPoints.unwrap(a) + MultiplierPoints.unwrap(b));
-}
-
-function sub(MultiplierPoints a, MultiplierPoints b) pure returns (MultiplierPoints) {
-    return MultiplierPoints.wrap(MultiplierPoints.unwrap(a) - MultiplierPoints.unwrap(b));
-}
-
-function lt(MultiplierPoints a, MultiplierPoints b) pure returns (bool) {
-    return MultiplierPoints.unwrap(a) < MultiplierPoints.unwrap(b);
-}
-
-function gt(MultiplierPoints a, MultiplierPoints b) pure returns (bool) {
-    return MultiplierPoints.unwrap(a) > MultiplierPoints.unwrap(b);
-}
-
-library MultiplierPointsCalculator {
+library MultiplierPointCalculator {
     uint256 constant MAX_BOOST = 4;
     uint256 constant YEAR = 365 days;
     uint256 constant MP_APY = 1;
 
+    function gtThanZero(MultiplierPoint a) public pure returns (bool) {
+        return MultiplierPoint.unwrap(a) > 0;
+    }
     /**
      * @notice Calculates maximum multiplier point increase for given balance
      * @param _mpToMint tested value
@@ -39,15 +21,16 @@ library MultiplierPointsCalculator {
      * @param _bonusMP bonus multiplier point of the account
      * @return _maxMpToMint maximum multiplier points to mint
      */
+
     function getMaxMPToMint(
-        MultiplierPoints _mpToMint,
+        MultiplierPoint _mpToMint,
         uint256 _balance,
-        MultiplierPoints _bonusMP,
-        MultiplierPoints _totalMP
+        MultiplierPoint _bonusMP,
+        MultiplierPoint _totalMP
     )
-        private
+        public
         pure
-        returns (MultiplierPoints _maxMpToMint)
+        returns (MultiplierPoint _maxMpToMint)
     {
         // Maximum multiplier point for given balance
         _maxMpToMint = getMPToMint(_balance, MAX_BOOST * YEAR) + _bonusMP;
@@ -66,7 +49,15 @@ library MultiplierPointsCalculator {
      * @param _deltaTime time difference
      * @return multiplier points to mint
      */
-    function getMPToMint(uint256 _balance, uint256 _deltaTime) private pure returns (MultiplierPoints) {
-        return MultiplierPoints.wrap(Math.mulDiv(_balance, _deltaTime, YEAR) * MP_APY);
+    function getMPToMint(uint256 _balance, uint256 _deltaTime) public pure returns (MultiplierPoint) {
+        return MultiplierPoint.wrap(Math.mulDiv(_balance, _deltaTime, YEAR) * MP_APY);
+    }
+
+    function getMPReduced(uint256 _currentBalance, uint256 _decreasedBalance, MultiplierPoint _totalMP) public pure returns (MultiplierPoint) {
+        return MultiplierPoint.wrap(Math.mulDiv(_decreasedBalance, MultiplierPoint.unwrap(_totalMP), _currentBalance));
+    }
+
+    function getMaxMP(uint256 _amount) public pure returns (MultiplierPoint) {
+        return getMPToMint(_amount, MAX_BOOST * YEAR);
     }
 }

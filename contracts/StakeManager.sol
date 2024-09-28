@@ -7,9 +7,13 @@ import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 
 import { TrustedCodehashAccess } from "./access/TrustedCodehashAccess.sol";
 import { ExpiredStakeStorage } from "./storage/ExpiredStakeStorage.sol";
+import { MultiplierPoint, ZERO } from "./math/MultiplierPoint.sol";
+import { MultiplierPointCalculator } from "./math/MultiplierPointCalculator.sol";
 import { StakeVault } from "./StakeVault.sol";
 
 contract StakeManager is TrustedCodehashAccess {
+    using MultiplierPointCalculator for MultiplierPoint;
+
     error StakeManager__FundsLocked();
     error StakeManager__InvalidLockTime();
     error StakeManager__NoPendingMigration();
@@ -26,8 +30,8 @@ contract StakeManager is TrustedCodehashAccess {
     struct Account {
         address rewardAddress;
         uint256 balance;
-        uint256 bonusMP;
-        uint256 totalMP;
+        MultiplierPoint bonusMP;
+        MultiplierPoint totalMP;
         uint256 lastMint;
         uint256 lockUntil;
         uint256 epoch;
@@ -38,7 +42,7 @@ contract StakeManager is TrustedCodehashAccess {
         uint256 startTime;
         uint256 epochReward;
         uint256 totalSupply;
-        uint256 estimatedMP;
+        MultiplierPoint estimatedMP;
     }
 
     uint256 public constant EPOCH_SIZE = 1 weeks;
@@ -55,14 +59,14 @@ contract StakeManager is TrustedCodehashAccess {
     uint256 public pendingReward;
     uint256 public immutable startTime;
 
-    uint256 public pendingMPToBeMinted;
-    uint256 public totalSupplyMP;
+    MultiplierPoint public pendingMPToBeMinted;
+    MultiplierPoint public totalSupplyMP;
     uint256 public totalSupplyBalance;
-    uint256 public totalMPPerEpoch;
+    MultiplierPoint public totalMPPerEpoch;
 
     ExpiredStakeStorage public expiredStakeStorage;
 
-    uint256 public currentEpochTotalExpiredMP;
+    MultiplierPoint public currentEpochTotalExpiredMP;
 
     StakeManager public migration;
     StakeManager public immutable previousManager;
@@ -113,14 +117,14 @@ contract StakeManager is TrustedCodehashAccess {
         uint256 tempCurrentEpoch = currentEpoch;
         while (tempCurrentEpoch < _limitEpoch) {
             Epoch storage thisEpoch = epochs[tempCurrentEpoch];
-            uint256 expiredMP = expiredStakeStorage.getExpiredMP(tempCurrentEpoch);
-            if (expiredMP > 0) {
-                totalMPPerEpoch -= expiredMP;
+            MultiplierPoint expiredMP = expiredStakeStorage.getExpiredMP(tempCurrentEpoch);
+            if (expiredMP > ZERO) {
+                totalMPPerEpoch = totalMPPerEpoch - expiredMP;
                 expiredStakeStorage.deleteExpiredMP(tempCurrentEpoch);
             }
             thisEpoch.estimatedMP = totalMPPerEpoch - currentEpochTotalExpiredMP;
-            delete currentEpochTotalExpiredMP;
-            pendingMPToBeMinted += thisEpoch.estimatedMP;
+            currentEpochTotalExpiredMP = ZERO;
+            pendingMPToBeMinted = pendingMPToBeMinted + thisEpoch.estimatedMP;
 
             //finalize current epoch
             if (tempCurrentEpoch == currentEpoch) {
@@ -166,15 +170,15 @@ contract StakeManager is TrustedCodehashAccess {
         }
 
         //mp estimation
-        uint256 mpPerEpoch = _getMPToMint(_amount, EPOCH_SIZE);
-        if (mpPerEpoch < 1) {
+        MultiplierPoint mpPerEpoch = MultiplierPointCalculator.getMPToMint(_amount, EPOCH_SIZE);
+        if (mpPerEpoch < MultiplierPoint.wrap(1)) {
             revert StakeManager__StakeIsTooLow();
         }
-        uint256 currentEpochExpiredMP = mpPerEpoch - _getMPToMint(_amount, epochEnd() - block.timestamp);
-        uint256 maxMpToMint = _getMPToMint(_amount, MAX_BOOST * YEAR) + currentEpochExpiredMP;
-        uint256 epochAmountToReachMpLimit = (maxMpToMint) / mpPerEpoch;
+        MultiplierPoint currentEpochExpiredMP = mpPerEpoch - MultiplierPointCalculator.getMPToMint(_amount, epochEnd() - block.timestamp);
+        MultiplierPoint maxMpToMint = MultiplierPointCalculator.getMPToMint(_amount, MAX_BOOST * YEAR) + currentEpochExpiredMP;
+        uint256 epochAmountToReachMpLimit = MultiplierPoint.unwrap(maxMpToMint / mpPerEpoch);
         uint256 mpLimitEpoch = currentEpoch + epochAmountToReachMpLimit;
-        uint256 lastEpochAmountToMint = ((mpPerEpoch * (epochAmountToReachMpLimit + 1)) - maxMpToMint);
+        MultiplierPoint lastEpochAmountToMint = (mpPerEpoch * MultiplierPoint.wrap(epochAmountToReachMpLimit + 1)) - maxMpToMint;
 
         // account initialization
         account.lockUntil = block.timestamp + _secondsToLock;
@@ -186,8 +190,8 @@ contract StakeManager is TrustedCodehashAccess {
 
         //update global storage
         totalSupplyBalance += _amount;
-        currentEpochTotalExpiredMP += currentEpochExpiredMP;
-        totalMPPerEpoch += mpPerEpoch;
+        currentEpochTotalExpiredMP = currentEpochTotalExpiredMP + currentEpochExpiredMP;
+        totalMPPerEpoch = totalMPPerEpoch + mpPerEpoch;
         expiredStakeStorage.incrementExpiredMP(mpLimitEpoch, lastEpochAmountToMint);
         expiredStakeStorage.incrementExpiredMP(mpLimitEpoch + 1, mpPerEpoch - lastEpochAmountToMint);
     }
@@ -211,21 +215,21 @@ contract StakeManager is TrustedCodehashAccess {
         }
         _processAccount(account, currentEpoch);
 
-        uint256 reducedMP = Math.mulDiv(_amount, account.totalMP, account.balance);
-        uint256 reducedInitialMP = Math.mulDiv(_amount, account.bonusMP, account.balance);
+        MultiplierPoint reducedMP = MultiplierPointCalculator.getMPReduced(account.balance, _amount, account.totalMP);
+        MultiplierPoint reducedInitialMP = MultiplierPointCalculator.getMPReduced(account.balance, _amount, account.bonusMP);
 
-        uint256 mpPerEpoch = _getMPToMint(account.balance, EPOCH_SIZE);
+        MultiplierPoint mpPerEpoch = MultiplierPointCalculator.getMPToMint(account.balance, EPOCH_SIZE);
         expiredStakeStorage.decrementExpiredMP(account.mpLimitEpoch, mpPerEpoch);
         if (account.mpLimitEpoch < currentEpoch) {
-            totalMPPerEpoch -= mpPerEpoch;
+            totalMPPerEpoch = totalMPPerEpoch - mpPerEpoch;
         }
 
-        //update storage
-        account.balance -= _amount;
-        account.bonusMP -= reducedInitialMP;
-        account.totalMP -= reducedMP;
+        //update storages
+        account.balance = account.balance - _amount;
+        account.bonusMP = account.bonusMP - reducedInitialMP;
+        account.totalMP = account.totalMP - reducedMP;
         totalSupplyBalance -= _amount;
-        totalSupplyMP -= reducedMP;
+        totalSupplyMP = totalSupplyMP - reducedMP;
     }
 
     /**
@@ -338,12 +342,12 @@ contract StakeManager is TrustedCodehashAccess {
      */
     function migrationInitialize(
         uint256 _currentEpoch,
-        uint256 _totalSupplyMP,
+        MultiplierPoint _totalSupplyMP,
         uint256 _totalSupplyBalance,
         uint256 _startTime,
-        uint256 _totalMPPerEpoch,
-        uint256 _pendingMPToBeMinted,
-        uint256 _currentEpochExpiredMP
+        MultiplierPoint _totalMPPerEpoch,
+        MultiplierPoint _pendingMPToBeMinted,
+        MultiplierPoint _currentEpochExpiredMP
     )
         external
         onlyPreviousManager
@@ -383,8 +387,8 @@ contract StakeManager is TrustedCodehashAccess {
     {
         _processAccount(accounts[msg.sender], currentEpoch);
         Account memory account = accounts[msg.sender];
-        totalSupplyMP -= account.totalMP;
-        totalSupplyBalance -= account.balance;
+        totalSupplyMP = totalSupplyMP - account.totalMP;
+        totalSupplyBalance = totalSupplyBalance - account.balance;
         delete accounts[msg.sender];
         migration.migrateFrom(msg.sender, _acceptMigration, account);
         return migration;
@@ -401,8 +405,8 @@ contract StakeManager is TrustedCodehashAccess {
         if (_acceptMigration) {
             accounts[_vault] = _account;
         } else {
-            totalSupplyMP -= _account.totalMP;
-            totalSupplyBalance -= _account.balance;
+            totalSupplyMP = totalSupplyMP - _account.totalMP;
+            totalSupplyBalance = totalSupplyBalance - _account.balance;
         }
     }
 
@@ -411,8 +415,8 @@ contract StakeManager is TrustedCodehashAccess {
      * @notice Increase total MP from old manager
      * @param _amount amount MP increased on account after migration initialized
      */
-    function increaseTotalMP(uint256 _amount) external onlyPreviousManager {
-        totalSupplyMP += _amount;
+    function increaseTotalMP(MultiplierPoint _amount) external onlyPreviousManager {
+        totalSupplyMP = totalSupplyMP + _amount;
     }
 
     /**
@@ -426,12 +430,12 @@ contract StakeManager is TrustedCodehashAccess {
         }
         uint256 userReward;
         uint256 userEpoch = account.epoch;
-        uint256 mpDifference = account.totalMP;
+        MultiplierPoint mpDifference = account.totalMP;
         while (userEpoch < _limitEpoch) {
             Epoch storage iEpoch = epochs[userEpoch];
             //mint multiplier points to that epoch
             _mintMP(account, startTime + (EPOCH_SIZE * (userEpoch + 1)), iEpoch);
-            uint256 userSupply = account.balance + account.totalMP;
+            uint256 userSupply = account.balance + MultiplierPoint.unwrap(account.totalMP);
             uint256 userEpochReward = Math.mulDiv(userSupply, iEpoch.epochReward, iEpoch.totalSupply);
             userReward += userEpochReward;
             iEpoch.epochReward -= userEpochReward;
@@ -462,18 +466,18 @@ contract StakeManager is TrustedCodehashAccess {
      * @param amount amount to stake
      */
     function _mintBonusMP(Account storage account, uint256 increasedLockTime, uint256 amount) private {
-        uint256 mpToMint;
+        MultiplierPoint mpToMint;
         if (amount > 0) {
-            mpToMint += amount; //initial multiplier points
+            mpToMint = mpToMint + MultiplierPoint.wrap(amount); //initial multiplier points
         }
         if (increasedLockTime > 0) {
             //bonus for increased lock time
-            mpToMint += _getMPToMint(account.balance + amount, increasedLockTime);
+            mpToMint = mpToMint + MultiplierPointCalculator.getMPToMint(account.balance + amount, increasedLockTime);
         }
         //update storage
-        totalSupplyMP += mpToMint;
-        account.bonusMP += mpToMint;
-        account.totalMP += mpToMint;
+        totalSupplyMP = totalSupplyMP + mpToMint;
+        account.bonusMP = account.bonusMP + mpToMint;
+        account.totalMP = account.totalMP + mpToMint;
         account.lastMint = block.timestamp;
     }
 
@@ -484,8 +488,8 @@ contract StakeManager is TrustedCodehashAccess {
      * @param epoch Epoch to increment total supply
      */
     function _mintMP(Account storage account, uint256 processTime, Epoch storage epoch) private {
-        uint256 mpToMint = _getMaxMPToMint(
-            _getMPToMint(account.balance, processTime - account.lastMint),
+        MultiplierPoint mpToMint = MultiplierPointCalculator.getMaxMPToMint(
+            MultiplierPointCalculator.getMPToMint(account.balance, processTime - account.lastMint),
             account.balance,
             account.bonusMP,
             account.totalMP
@@ -493,52 +497,15 @@ contract StakeManager is TrustedCodehashAccess {
 
         //update storage
         account.lastMint = processTime;
-        account.totalMP += mpToMint;
-        totalSupplyMP += mpToMint;
+        account.totalMP = account.totalMP + mpToMint;
+        totalSupplyMP = totalSupplyMP + mpToMint;
 
         //mp estimation
-        epoch.estimatedMP -= mpToMint;
-        pendingMPToBeMinted -= mpToMint;
+        epoch.estimatedMP = epoch.estimatedMP - mpToMint;
+        pendingMPToBeMinted = pendingMPToBeMinted - mpToMint;
     }
 
-    /**
-     * @notice Calculates maximum multiplier point increase for given balance
-     * @param _mpToMint tested value
-     * @param _balance balance of account
-     * @param _totalMP total multiplier point of the account
-     * @param _bonusMP bonus multiplier point of the account
-     * @return _maxMpToMint maximum multiplier points to mint
-     */
-    function _getMaxMPToMint(
-        uint256 _mpToMint,
-        uint256 _balance,
-        uint256 _bonusMP,
-        uint256 _totalMP
-    )
-        private
-        pure
-        returns (uint256 _maxMpToMint)
-    {
-        // Maximum multiplier point for given balance
-        _maxMpToMint = _getMPToMint(_balance, MAX_BOOST * YEAR) + _bonusMP;
-        if (_mpToMint + _totalMP > _maxMpToMint) {
-            //reached cap when increasing MP
-            return _maxMpToMint - _totalMP; //how much left to reach cap
-        } else {
-            //not reached capw hen increasing MP
-            return _mpToMint; //just return tested value
-        }
-    }
 
-    /**
-     * @notice Calculates multiplier points to mint for given balance and time
-     * @param _balance balance of account
-     * @param _deltaTime time difference
-     * @return multiplier points to mint
-     */
-    function _getMPToMint(uint256 _balance, uint256 _deltaTime) private pure returns (uint256) {
-        return Math.mulDiv(_balance, _deltaTime, YEAR) * MP_APY;
-    }
 
     /*
      * @notice Calculates multiplier points to mint for given balance and time
@@ -546,8 +513,8 @@ contract StakeManager is TrustedCodehashAccess {
      * @param _deltaTime time difference
      * @return multiplier points to mint
      */
-    function calculateMPToMint(uint256 _balance, uint256 _deltaTime) public pure returns (uint256) {
-        return _getMPToMint(_balance, _deltaTime);
+    function calculateMPToMint(uint256 _balance, uint256 _deltaTime) public pure returns (MultiplierPoint) {
+        return MultiplierPointCalculator.getMPToMint(_balance, _deltaTime);
     }
 
     /**
@@ -556,7 +523,7 @@ contract StakeManager is TrustedCodehashAccess {
      * @return _totalSupply current total supply
      */
     function totalSupply() public view returns (uint256 _totalSupply) {
-        return totalSupplyMP + totalSupplyBalance + pendingMPToBeMinted;
+        return MultiplierPoint.unwrap(totalSupplyMP) + totalSupplyBalance + MultiplierPoint.unwrap(pendingMPToBeMinted);
     }
 
     /**
@@ -564,7 +531,7 @@ contract StakeManager is TrustedCodehashAccess {
      * @return _totalSupply current total supply
      */
     function totalSupplyMinted() public view returns (uint256 _totalSupply) {
-        return totalSupplyMP + totalSupplyBalance;
+        return MultiplierPoint.unwrap(totalSupplyMP) + totalSupplyBalance;
     }
 
     /**
