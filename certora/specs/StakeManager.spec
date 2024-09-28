@@ -198,7 +198,7 @@ rule epochOnlyIncreases(method f) {
 }
 
 
-//TODO codehash / isVault
+//TODO codehash / isTrustedCodehash
 /*
 ghost mapping(address => bytes32) codehash;
 
@@ -211,7 +211,7 @@ rule checksCodeHash(method f) filtered {
 } {
   env e;
 
-  bool isWhitelisted = isVault(codehash[e.msg.sender]);
+  bool isWhitelisted = isTrustedCodehash(codehash[e.msg.sender]);
   f(e);
 
   assert isWhitelisted;

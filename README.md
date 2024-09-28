@@ -43,7 +43,7 @@ To install the system on the blockchain, follow these steps:
 
 1. **Deploy StakeManager**: Begin by deploying the `StakeManager` contract.
 2. **Deploy Sample VaultManager**: Next, deploy a sample `VaultManager` contract on any chain (this can be on a development network or a testnet).
-3. **Configure Codehash**: Once the `VaultManager` is deployed, retrieve its codehash and configure it in the `StakeManager` using the `setVault(bytes32)` function.
+3. **Configure Codehash**: Once the `VaultManager` is deployed, retrieve its codehash and configure it in the `StakeManager` using the `setTrustedCodehash(bytes32, bool)` function.
 4. **Optional - Use VaultFactory**: The `VaultFactory` contract can be optionally used to optimize gas costs during deployments and to facilitate the creation of valid vaults.
 
 ### Staking Tokens

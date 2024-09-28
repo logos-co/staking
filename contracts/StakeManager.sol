@@ -3,33 +3,13 @@
 pragma solidity ^0.8.18;
 
 import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 
+import { TrustedCodehashAccess } from "./access/TrustedCodehashAccess.sol";
+import { ExpiredStakeStorage } from "./storage/ExpiredStakeStorage.sol";
 import { StakeVault } from "./StakeVault.sol";
 
-contract StakeRewardEstimate is Ownable {
-    mapping(uint256 epochId => uint256 balance) public expiredMPPerEpoch;
-
-    function getExpiredMP(uint256 epochId) public view returns (uint256) {
-        return expiredMPPerEpoch[epochId];
-    }
-
-    function incrementExpiredMP(uint256 epochId, uint256 amount) public onlyOwner {
-        expiredMPPerEpoch[epochId] += amount;
-    }
-
-    function decrementExpiredMP(uint256 epochId, uint256 amount) public onlyOwner {
-        expiredMPPerEpoch[epochId] -= amount;
-    }
-
-    function deleteExpiredMP(uint256 epochId) public onlyOwner {
-        delete expiredMPPerEpoch[epochId];
-    }
-}
-
-contract StakeManager is Ownable {
-    error StakeManager__SenderIsNotVault();
+contract StakeManager is TrustedCodehashAccess {
     error StakeManager__FundsLocked();
     error StakeManager__InvalidLockTime();
     error StakeManager__NoPendingMigration();
@@ -70,7 +50,6 @@ contract StakeManager is Ownable {
 
     mapping(address index => Account value) public accounts;
     mapping(uint256 index => Epoch value) public epochs;
-    mapping(bytes32 codehash => bool approved) public isVault;
 
     uint256 public currentEpoch;
     uint256 public pendingReward;
@@ -81,23 +60,13 @@ contract StakeManager is Ownable {
     uint256 public totalSupplyBalance;
     uint256 public totalMPPerEpoch;
 
-    StakeRewardEstimate public stakeRewardEstimate;
+    ExpiredStakeStorage public expiredStakeStorage;
 
     uint256 public currentEpochTotalExpiredMP;
 
     StakeManager public migration;
     StakeManager public immutable previousManager;
     ERC20 public immutable stakedToken;
-
-    /**
-     * @notice Only callable by vaults
-     */
-    modifier onlyVault() {
-        if (!isVault[msg.sender.codehash]) {
-            revert StakeManager__SenderIsNotVault();
-        }
-        _;
-    }
 
     modifier onlyAccountInitialized(address account) {
         if (accounts[account].lockUntil == 0) {
@@ -144,10 +113,10 @@ contract StakeManager is Ownable {
         uint256 tempCurrentEpoch = currentEpoch;
         while (tempCurrentEpoch < _limitEpoch) {
             Epoch storage thisEpoch = epochs[tempCurrentEpoch];
-            uint256 expiredMP = stakeRewardEstimate.getExpiredMP(tempCurrentEpoch);
+            uint256 expiredMP = expiredStakeStorage.getExpiredMP(tempCurrentEpoch);
             if (expiredMP > 0) {
                 totalMPPerEpoch -= expiredMP;
-                stakeRewardEstimate.deleteExpiredMP(tempCurrentEpoch);
+                expiredStakeStorage.deleteExpiredMP(tempCurrentEpoch);
             }
             thisEpoch.estimatedMP = totalMPPerEpoch - currentEpochTotalExpiredMP;
             delete currentEpochTotalExpiredMP;
@@ -171,9 +140,9 @@ contract StakeManager is Ownable {
         previousManager = StakeManager(_previousManager);
         stakedToken = ERC20(_stakedToken);
         if (address(previousManager) != address(0)) {
-            stakeRewardEstimate = previousManager.stakeRewardEstimate();
+            expiredStakeStorage = previousManager.expiredStakeStorage();
         } else {
-            stakeRewardEstimate = new StakeRewardEstimate();
+            expiredStakeStorage = new ExpiredStakeStorage();
         }
     }
 
@@ -186,7 +155,7 @@ contract StakeManager is Ownable {
      * @dev Reverts when account has already staked funds.
      * @dev Reverts when amount staked results in less than 1 MP per epoch.
      */
-    function stake(uint256 _amount, uint256 _secondsToLock) external onlyVault noPendingMigration {
+    function stake(uint256 _amount, uint256 _secondsToLock) external onlyTrustedCodehash noPendingMigration {
         finalizeEpoch(newEpoch());
         Account storage account = accounts[msg.sender];
         if (account.balance > 0 || account.lockUntil != 0) {
@@ -219,14 +188,19 @@ contract StakeManager is Ownable {
         totalSupplyBalance += _amount;
         currentEpochTotalExpiredMP += currentEpochExpiredMP;
         totalMPPerEpoch += mpPerEpoch;
-        stakeRewardEstimate.incrementExpiredMP(mpLimitEpoch, lastEpochAmountToMint);
-        stakeRewardEstimate.incrementExpiredMP(mpLimitEpoch + 1, mpPerEpoch - lastEpochAmountToMint);
+        expiredStakeStorage.incrementExpiredMP(mpLimitEpoch, lastEpochAmountToMint);
+        expiredStakeStorage.incrementExpiredMP(mpLimitEpoch + 1, mpPerEpoch - lastEpochAmountToMint);
     }
 
     /**
      * leaves the staking pool and withdraws all funds;
      */
-    function unstake(uint256 _amount) external onlyVault onlyAccountInitialized(msg.sender) noPendingMigration {
+    function unstake(uint256 _amount)
+        external
+        onlyTrustedCodehash
+        onlyAccountInitialized(msg.sender)
+        noPendingMigration
+    {
         finalizeEpoch(newEpoch());
         Account storage account = accounts[msg.sender];
         if (_amount > account.balance) {
@@ -241,7 +215,7 @@ contract StakeManager is Ownable {
         uint256 reducedInitialMP = Math.mulDiv(_amount, account.bonusMP, account.balance);
 
         uint256 mpPerEpoch = _getMPToMint(account.balance, EPOCH_SIZE);
-        stakeRewardEstimate.decrementExpiredMP(account.mpLimitEpoch, mpPerEpoch);
+        expiredStakeStorage.decrementExpiredMP(account.mpLimitEpoch, mpPerEpoch);
         if (account.mpLimitEpoch < currentEpoch) {
             totalMPPerEpoch -= mpPerEpoch;
         }
@@ -263,7 +237,7 @@ contract StakeManager is Ownable {
      */
     function lock(uint256 _secondsToIncreaseLock)
         external
-        onlyVault
+        onlyTrustedCodehash
         onlyAccountInitialized(msg.sender)
         noPendingMigration
     {
@@ -332,14 +306,6 @@ contract StakeManager is Ownable {
     }
 
     /**
-     * @notice Enables a contract class to interact with staking functions
-     * @param _codehash bytecode hash of contract
-     */
-    function setVault(bytes32 _codehash) external onlyOwner {
-        isVault[_codehash] = true;
-    }
-
-    /**
      * @notice starts migration to new StakeManager
      * @param _migration new StakeManager
      */
@@ -350,7 +316,7 @@ contract StakeManager is Ownable {
         }
         migration = _migration;
         stakedToken.transfer(address(migration), epochReward());
-        stakeRewardEstimate.transferOwnership(address(_migration));
+        expiredStakeStorage.transferOwnership(address(_migration));
         migration.migrationInitialize(
             currentEpoch,
             totalSupplyMP,
@@ -410,7 +376,7 @@ contract StakeManager is Ownable {
      */
     function migrateTo(bool _acceptMigration)
         external
-        onlyVault
+        onlyTrustedCodehash
         onlyAccountInitialized(msg.sender)
         onlyPendingMigration
         returns (StakeManager newManager)
