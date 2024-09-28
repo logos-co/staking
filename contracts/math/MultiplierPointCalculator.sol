@@ -53,7 +53,15 @@ library MultiplierPointCalculator {
         return MultiplierPoint.wrap(Math.mulDiv(_balance, _deltaTime, YEAR) * MP_APY);
     }
 
-    function getMPReduced(uint256 _currentBalance, uint256 _decreasedBalance, MultiplierPoint _totalMP) public pure returns (MultiplierPoint) {
+    function getMPReduced(
+        uint256 _currentBalance,
+        uint256 _decreasedBalance,
+        MultiplierPoint _totalMP
+    )
+        public
+        pure
+        returns (MultiplierPoint)
+    {
         return MultiplierPoint.wrap(Math.mulDiv(_decreasedBalance, MultiplierPoint.unwrap(_totalMP), _currentBalance));
     }
 

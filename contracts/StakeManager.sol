@@ -174,11 +174,14 @@ contract StakeManager is TrustedCodehashAccess {
         if (mpPerEpoch < MultiplierPoint.wrap(1)) {
             revert StakeManager__StakeIsTooLow();
         }
-        MultiplierPoint currentEpochExpiredMP = mpPerEpoch - MultiplierPointCalculator.getMPToMint(_amount, epochEnd() - block.timestamp);
-        MultiplierPoint maxMpToMint = MultiplierPointCalculator.getMPToMint(_amount, MAX_BOOST * YEAR) + currentEpochExpiredMP;
+        MultiplierPoint currentEpochExpiredMP =
+            mpPerEpoch - MultiplierPointCalculator.getMPToMint(_amount, epochEnd() - block.timestamp);
+        MultiplierPoint maxMpToMint =
+            MultiplierPointCalculator.getMPToMint(_amount, MAX_BOOST * YEAR) + currentEpochExpiredMP;
         uint256 epochAmountToReachMpLimit = MultiplierPoint.unwrap(maxMpToMint / mpPerEpoch);
         uint256 mpLimitEpoch = currentEpoch + epochAmountToReachMpLimit;
-        MultiplierPoint lastEpochAmountToMint = (mpPerEpoch * MultiplierPoint.wrap(epochAmountToReachMpLimit + 1)) - maxMpToMint;
+        MultiplierPoint lastEpochAmountToMint =
+            (mpPerEpoch * MultiplierPoint.wrap(epochAmountToReachMpLimit + 1)) - maxMpToMint;
 
         // account initialization
         account.lockUntil = block.timestamp + _secondsToLock;
@@ -216,7 +219,8 @@ contract StakeManager is TrustedCodehashAccess {
         _processAccount(account, currentEpoch);
 
         MultiplierPoint reducedMP = MultiplierPointCalculator.getMPReduced(account.balance, _amount, account.totalMP);
-        MultiplierPoint reducedInitialMP = MultiplierPointCalculator.getMPReduced(account.balance, _amount, account.bonusMP);
+        MultiplierPoint reducedInitialMP =
+            MultiplierPointCalculator.getMPReduced(account.balance, _amount, account.bonusMP);
 
         MultiplierPoint mpPerEpoch = MultiplierPointCalculator.getMPToMint(account.balance, EPOCH_SIZE);
         expiredStakeStorage.decrementExpiredMP(account.mpLimitEpoch, mpPerEpoch);
@@ -504,8 +508,6 @@ contract StakeManager is TrustedCodehashAccess {
         epoch.estimatedMP = epoch.estimatedMP - mpToMint;
         pendingMPToBeMinted = pendingMPToBeMinted - mpToMint;
     }
-
-
 
     /*
      * @notice Calculates multiplier points to mint for given balance and time
