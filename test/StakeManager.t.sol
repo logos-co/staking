@@ -7,7 +7,7 @@ import { Test, console } from "forge-std/Test.sol";
 import { Deploy } from "../script/Deploy.s.sol";
 import { DeployMigrationStakeManager } from "../script/DeployMigrationStakeManager.s.sol";
 import { DeploymentConfig } from "../script/DeploymentConfig.s.sol";
-import { StakeManager, StakeRewardEstimate } from "../contracts/StakeManager.sol";
+import { TrustedCodehashAccess, StakeManager, ExpiredStakeStorage } from "../contracts/StakeManager.sol";
 import { StakeVault } from "../contracts/StakeVault.sol";
 import { VaultFactory } from "../contracts/VaultFactory.sol";
 
@@ -42,9 +42,9 @@ contract StakeManagerTest is Test {
         vm.prank(owner);
         vault = vaultFactory.createVault();
 
-        if (!stakeManager.isVault(address(vault).codehash)) {
+        if (!stakeManager.isTrustedCodehash(address(vault).codehash)) {
             vm.prank(deployer);
-            stakeManager.setVault(address(vault).codehash);
+            stakeManager.setTrustedCodehash(address(vault).codehash, true);
         }
     }
 
@@ -83,7 +83,7 @@ contract StakeManagerTest is Test {
 
 contract StakeTest is StakeManagerTest {
     function test_RevertWhen_SenderIsNotVault() public {
-        vm.expectRevert(StakeManager.StakeManager__SenderIsNotVault.selector);
+        vm.expectRevert(TrustedCodehashAccess.TrustedCodehashAccess__UnauthorizedCodehash.selector);
         stakeManager.stake(100, 1);
     }
 
@@ -169,8 +169,8 @@ contract StakeTest is StakeManagerTest {
     }
 
     function test_StakeWithoutLockUpTimeMintsMultiplierPoints() public {
-        uint256 stakeAmount = 100;
-        StakeVault userVault = _createStakingAccount(testUser, stakeAmount, 0, stakeAmount * 10);
+        uint256 stakeAmount = 54;
+        StakeVault userVault = _createStakingAccount(testUser, stakeAmount, 0, stakeAmount);
 
         (,, uint256 totalMP,,,,,) = stakeManager.accounts(address(userVault));
         assertEq(stakeManager.totalSupplyMP(), stakeAmount, "total multiplier point supply");
@@ -187,7 +187,7 @@ contract StakeTest is StakeManagerTest {
 
 contract UnstakeTest is StakeManagerTest {
     function test_RevertWhen_SenderIsNotVault() public {
-        vm.expectRevert(StakeManager.StakeManager__SenderIsNotVault.selector);
+        vm.expectRevert(TrustedCodehashAccess.TrustedCodehashAccess__UnauthorizedCodehash.selector);
         stakeManager.unstake(1);
     }
 
@@ -289,7 +289,7 @@ contract UnstakeTest is StakeManagerTest {
 
 contract LockTest is StakeManagerTest {
     function test_RevertWhen_SenderIsNotVault() public {
-        vm.expectRevert(StakeManager.StakeManager__SenderIsNotVault.selector);
+        vm.expectRevert(TrustedCodehashAccess.TrustedCodehashAccess__UnauthorizedCodehash.selector);
         stakeManager.lock(100);
     }
 
@@ -371,7 +371,7 @@ contract LockTest is StakeManagerTest {
 
 contract LeaveTest is StakeManagerTest {
     function test_RevertWhen_SenderIsNotVault() public {
-        vm.expectRevert(StakeManager.StakeManager__SenderIsNotVault.selector);
+        vm.expectRevert(TrustedCodehashAccess.TrustedCodehashAccess__UnauthorizedCodehash.selector);
         stakeManager.migrateTo(false);
     }
 
@@ -393,7 +393,7 @@ contract LeaveTest is StakeManagerTest {
 
 contract MigrateTest is StakeManagerTest {
     function test_RevertWhen_SenderIsNotVault() public {
-        vm.expectRevert(StakeManager.StakeManager__SenderIsNotVault.selector);
+        vm.expectRevert(TrustedCodehashAccess.TrustedCodehashAccess__UnauthorizedCodehash.selector);
         stakeManager.migrateTo(true);
     }
 
@@ -423,7 +423,7 @@ contract MigrationInitializeTest is StakeManagerTest {
         vm.stopPrank();
 
         // first, ensure `secondStakeManager` is in migration mode itself
-        StakeRewardEstimate db = stakeManager.stakeRewardEstimate();
+        ExpiredStakeStorage db = stakeManager.expiredStakeStorage();
         vm.prank(address(stakeManager));
         db.transferOwnership(address(secondStakeManager));
 

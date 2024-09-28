@@ -2,7 +2,6 @@
 
 pragma solidity ^0.8.19;
 
-import { StakeRewardEstimate } from "./../../contracts/StakeManager.sol";
+import { ExpiredStakeStorage } from "./../../contracts/StakeManager.sol";
 
-contract StakeRewardEstimateA is StakeRewardEstimate {}
-
+contract ExpiredStakeStorageA is ExpiredStakeStorage { }
