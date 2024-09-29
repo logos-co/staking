@@ -57,17 +57,6 @@ contract StakeManager is Ownable {
         uint256 epoch;
     }
 
-    struct Account {
-        address rewardAddress;
-        uint256 balance;
-        uint256 bonusMP;
-        uint256 totalMP;
-        uint256 lastMint;
-        uint256 lockUntil;
-        uint256 epoch;
-        uint256 mpLimitEpoch;
-    }
-
     struct Epoch {
         uint256 startTime;
         uint256 epochReward;
