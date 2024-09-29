@@ -43,6 +43,20 @@ contract StakeManager is Ownable {
     error StakeManager__AlreadyStaked();
     error StakeManager__StakeIsTooLow();
 
+    struct AccountHeader {
+        uint256 balance;
+        uint256 bonusMP;
+        uint256 lockUntil;
+        uint256 mpLimitEpoch;
+        address rewardAddress;
+    }
+
+    struct AccountBody {
+        uint256 totalMP;
+        uint256 lastMint;
+        uint256 epoch;
+    }
+
     struct Account {
         address rewardAddress;
         uint256 balance;
@@ -68,7 +82,8 @@ contract StakeManager is Ownable {
     uint256 public constant MP_APY = 1;
     uint256 public constant MAX_BOOST = 4;
 
-    mapping(address index => Account value) public accounts;
+    mapping(address index => AccountHeader value) private accountsHeader;
+    mapping(address index => AccountBody value) private accountsBody;
     mapping(uint256 index => Epoch value) public epochs;
     mapping(bytes32 codehash => bool approved) public isVault;
 
@@ -89,6 +104,35 @@ contract StakeManager is Ownable {
     StakeManager public immutable previousManager;
     ERC20 public immutable stakedToken;
 
+    function accounts(address index)
+        external
+        view
+        returns (
+            address rewardAddress,
+            uint256 balance,
+            uint256 bonusMP,
+            uint256 totalMP,
+            uint256 lastMint,
+            uint256 lockUntil,
+            uint256 epoch,
+            uint256 mpLimitEpoch
+        )
+    {
+        AccountHeader memory header = accountsHeader[index];
+        AccountBody memory body = accountsBody[index];
+
+        return (
+            header.rewardAddress,
+            header.balance,
+            header.bonusMP,
+            body.totalMP,
+            body.lastMint,
+            header.lockUntil,
+            body.epoch,
+            header.mpLimitEpoch
+        );
+    }
+
     /**
      * @notice Only callable by vaults
      */
@@ -100,7 +144,7 @@ contract StakeManager is Ownable {
     }
 
     modifier onlyAccountInitialized(address account) {
-        if (accounts[account].lockUntil == 0) {
+        if (accountsHeader[account].lockUntil == 0) {
             revert StakeManager__AccountNotInitialized();
         }
         _;
@@ -188,7 +232,7 @@ contract StakeManager is Ownable {
      */
     function stake(uint256 _amount, uint256 _secondsToLock) external onlyVault noPendingMigration {
         finalizeEpoch(newEpoch());
-        if (accounts[msg.sender].balance > 0) {
+        if (accountsHeader[msg.sender].balance > 0) {
             revert StakeManager__AlreadyStaked();
         }
         if (_secondsToLock != 0 && (_secondsToLock < MIN_LOCKUP_PERIOD || _secondsToLock > MAX_LOCKUP_PERIOD)) {
@@ -212,16 +256,15 @@ contract StakeManager is Ownable {
         }
 
         // account initialization
-        accounts[msg.sender] = Account({
+        accountsHeader[msg.sender] = AccountHeader({
             rewardAddress: StakeVault(msg.sender).owner(),
             balance: _amount,
             bonusMP: bonusMP,
-            totalMP: bonusMP,
-            lastMint: block.timestamp,
             lockUntil: block.timestamp + _secondsToLock,
-            epoch: currentEpoch,
             mpLimitEpoch: mpLimitEpoch
         });
+
+        accountsBody[msg.sender] = AccountBody({ totalMP: bonusMP, lastMint: block.timestamp, epoch: currentEpoch });
 
         //update global storage
         totalSupplyMP += bonusMP;
@@ -237,28 +280,29 @@ contract StakeManager is Ownable {
      */
     function unstake(uint256 _amount) external onlyVault onlyAccountInitialized(msg.sender) noPendingMigration {
         finalizeEpoch(newEpoch());
-        Account storage account = accounts[msg.sender];
-        if (_amount > account.balance) {
+        AccountHeader storage accountHeader = accountsHeader[msg.sender];
+        AccountBody storage accountBody = accountsBody[msg.sender];
+        if (_amount > accountHeader.balance) {
             revert StakeManager__InsufficientFunds();
         }
-        if (account.lockUntil > block.timestamp) {
+        if (accountHeader.lockUntil > block.timestamp) {
             revert StakeManager__FundsLocked();
         }
-        _processAccount(account, currentEpoch);
+        _processAccount(accountHeader, accountBody, currentEpoch);
 
-        uint256 reducedMP = Math.mulDiv(_amount, account.totalMP, account.balance);
-        uint256 reducedInitialMP = Math.mulDiv(_amount, account.bonusMP, account.balance);
+        uint256 reducedMP = Math.mulDiv(_amount, accountBody.totalMP, accountHeader.balance);
+        uint256 reducedInitialMP = Math.mulDiv(_amount, accountHeader.bonusMP, accountHeader.balance);
 
-        uint256 mpPerEpoch = _getMPToMint(account.balance, EPOCH_SIZE);
-        stakeRewardEstimate.decrementExpiredMP(account.mpLimitEpoch, mpPerEpoch);
-        if (account.mpLimitEpoch < currentEpoch) {
+        uint256 mpPerEpoch = _getMPToMint(accountHeader.balance, EPOCH_SIZE);
+        stakeRewardEstimate.decrementExpiredMP(accountHeader.mpLimitEpoch, mpPerEpoch);
+        if (accountHeader.mpLimitEpoch < currentEpoch) {
             totalMPPerEpoch -= mpPerEpoch;
         }
 
         //update storage
-        account.balance -= _amount;
-        account.bonusMP -= reducedInitialMP;
-        account.totalMP -= reducedMP;
+        accountHeader.balance -= _amount;
+        accountHeader.bonusMP -= reducedInitialMP;
+        accountBody.totalMP -= reducedMP;
         totalSupplyBalance -= _amount;
         totalSupplyMP -= reducedMP;
     }
@@ -277,9 +321,10 @@ contract StakeManager is Ownable {
         noPendingMigration
     {
         finalizeEpoch(newEpoch());
-        Account storage account = accounts[msg.sender];
-        _processAccount(account, currentEpoch);
-        uint256 lockUntil = account.lockUntil;
+        AccountHeader storage accountHeader = accountsHeader[msg.sender];
+        AccountBody storage accountBody = accountsBody[msg.sender];
+        _processAccount(accountHeader, accountBody, currentEpoch);
+        uint256 lockUntil = accountHeader.lockUntil;
         uint256 deltaTime;
         if (lockUntil < block.timestamp) {
             //if unlocked, increase from now
@@ -295,12 +340,12 @@ contract StakeManager is Ownable {
             revert StakeManager__InvalidLockTime();
         }
         //mints bonus multiplier points for seconds increased
-        uint256 bonusMP = _getMPToMint(account.balance, _secondsToIncreaseLock);
+        uint256 bonusMP = _getMPToMint(accountHeader.balance, _secondsToIncreaseLock);
 
         //update account storage
-        account.lockUntil = lockUntil;
-        account.bonusMP += bonusMP;
-        account.totalMP += bonusMP;
+        accountHeader.lockUntil = lockUntil;
+        accountHeader.bonusMP += bonusMP;
+        accountBody.totalMP += bonusMP;
         //update global storage
         totalSupplyMP += bonusMP;
     }
@@ -331,7 +376,8 @@ contract StakeManager is Ownable {
         if (address(migration) == address(0)) {
             finalizeEpoch(newEpoch());
         }
-        _processAccount(accounts[_vault], currentEpoch);
+
+        _processAccount(accountsHeader[_vault], accountsBody[_vault], currentEpoch);
     }
 
     /**
@@ -346,7 +392,7 @@ contract StakeManager is Ownable {
             }
             finalizeEpoch(_limitEpoch);
         }
-        _processAccount(accounts[_vault], _limitEpoch);
+        _processAccount(accountsHeader[_vault], accountsBody[_vault], _limitEpoch);
     }
 
     /**
@@ -433,12 +479,14 @@ contract StakeManager is Ownable {
         onlyPendingMigration
         returns (StakeManager newManager)
     {
-        _processAccount(accounts[msg.sender], currentEpoch);
-        Account memory account = accounts[msg.sender];
-        totalSupplyMP -= account.totalMP;
-        totalSupplyBalance -= account.balance;
-        delete accounts[msg.sender];
-        migration.migrateFrom(msg.sender, _acceptMigration, account);
+        _processAccount(accountsHeader[msg.sender], accountsBody[msg.sender], currentEpoch);
+        AccountHeader memory accountHeader = accountsHeader[msg.sender];
+        AccountBody memory accountBody = accountsBody[msg.sender];
+        totalSupplyMP -= accountBody.totalMP;
+        totalSupplyBalance -= accountHeader.balance;
+        delete accountsHeader[msg.sender];
+        delete accountsBody[msg.sender];
+        migration.migrateFrom(msg.sender, _acceptMigration, accountHeader, accountBody);
         return migration;
     }
 
@@ -446,15 +494,25 @@ contract StakeManager is Ownable {
      * @dev Only callable from old manager.
      * @notice Migrate account from old manager
      * @param _vault Account address
-     * @param _account Account data
+     * @param _accountHeader AccountHeader data
+     * @param _accountBody AccountBody data
      * @param _acceptMigration If account should be stored or its MP/balance supply reduced
      */
-    function migrateFrom(address _vault, bool _acceptMigration, Account memory _account) external onlyPreviousManager {
+    function migrateFrom(
+        address _vault,
+        bool _acceptMigration,
+        AccountHeader memory _accountHeader,
+        AccountBody memory _accountBody
+    )
+        external
+        onlyPreviousManager
+    {
         if (_acceptMigration) {
-            accounts[_vault] = _account;
+            accountsHeader[_vault] = _accountHeader;
+            accountsBody[_vault] = _accountBody;
         } else {
-            totalSupplyMP -= _account.totalMP;
-            totalSupplyBalance -= _account.balance;
+            totalSupplyMP -= _accountBody.totalMP;
+            totalSupplyBalance -= _accountHeader.balance;
         }
     }
 
@@ -469,21 +527,29 @@ contract StakeManager is Ownable {
 
     /**
      * @notice Process account until limit has reached
-     * @param account Account to process
+     * @param accountHeader AccountHeader to process
+     * @param accountBody AccountBody to process
      * @param _limitEpoch Until what epoch it should be executed
      */
-    function _processAccount(Account storage account, uint256 _limitEpoch) private {
+    function _processAccount(
+        AccountHeader storage accountHeader,
+        AccountBody storage accountBody,
+        uint256 _limitEpoch
+    )
+        private
+    {
         if (_limitEpoch > currentEpoch) {
             revert StakeManager__InvalidLimitEpoch();
         }
         uint256 userReward;
-        uint256 userEpoch = account.epoch;
-        uint256 mpDifference = account.totalMP;
+        uint256 userEpoch = accountBody.epoch;
+        uint256 mpDifference = accountBody.totalMP;
+        uint256 accountBalance = accountHeader.balance;
         while (userEpoch < _limitEpoch) {
             Epoch storage iEpoch = epochs[userEpoch];
             //mint multiplier points to that epoch
-            _mintMP(account, startTime + (EPOCH_SIZE * (userEpoch + 1)), iEpoch);
-            uint256 userSupply = account.balance + account.totalMP;
+            _mintMP(accountHeader, accountBody, startTime + (EPOCH_SIZE * (userEpoch + 1)), iEpoch);
+            uint256 userSupply = accountBalance + accountBody.totalMP;
             uint256 userEpochReward = Math.mulDiv(userSupply, iEpoch.epochReward, iEpoch.totalSupply);
             userReward += userEpochReward;
             iEpoch.epochReward -= userEpochReward;
@@ -494,34 +560,42 @@ contract StakeManager is Ownable {
             }
             userEpoch++;
         }
-        account.epoch = userEpoch;
+        accountBody.epoch = userEpoch;
         if (userReward > 0) {
             pendingReward -= userReward;
-            stakedToken.transfer(account.rewardAddress, userReward);
+            stakedToken.transfer(accountHeader.rewardAddress, userReward);
         }
         if (address(migration) != address(0)) {
-            mpDifference = account.totalMP - mpDifference;
+            mpDifference = accountBody.totalMP - mpDifference;
             migration.increaseTotalMP(mpDifference);
         }
     }
 
     /**
      * @notice Mint multiplier points for given account and epoch
-     * @param account Account earning multiplier points
+     * @param accountHeader AccountHeader earning multiplier points
+     * @param accountBody AccountBody earning multiplier points
      * @param processTime amount of time of multiplier points
      * @param epoch Epoch to increment total supply
      */
-    function _mintMP(Account storage account, uint256 processTime, Epoch storage epoch) private {
+    function _mintMP(
+        AccountHeader storage accountHeader,
+        AccountBody storage accountBody,
+        uint256 processTime,
+        Epoch storage epoch
+    )
+        private
+    {
         uint256 mpToMint = _getMaxMPToMint(
-            _getMPToMint(account.balance, processTime - account.lastMint),
-            account.balance,
-            account.bonusMP,
-            account.totalMP
+            _getMPToMint(accountHeader.balance, processTime - accountBody.lastMint),
+            accountHeader.balance,
+            accountHeader.bonusMP,
+            accountBody.totalMP
         );
 
         //update storage
-        account.lastMint = processTime;
-        account.totalMP += mpToMint;
+        accountBody.lastMint = processTime;
+        accountBody.totalMP += mpToMint;
         totalSupplyMP += mpToMint;
 
         //mp estimation
