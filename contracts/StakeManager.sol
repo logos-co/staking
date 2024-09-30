@@ -143,7 +143,7 @@ contract StakeManager is Ownable {
     function finalizeEpoch(uint256 _limitEpoch) private {
         uint256 tempCurrentEpoch = currentEpoch;
         while (tempCurrentEpoch < _limitEpoch) {
-            Epoch storage thisEpoch = epochs[tempCurrentEpoch];
+            Epoch memory thisEpoch;
             uint256 expiredMP = stakeRewardEstimate.getExpiredMP(tempCurrentEpoch);
             if (expiredMP > 0) {
                 totalMPPerEpoch -= expiredMP;
@@ -159,7 +159,7 @@ contract StakeManager is Ownable {
                 pendingReward += thisEpoch.epochReward;
             }
             thisEpoch.totalSupply = totalSupply();
-
+            epochs[tempCurrentEpoch] = thisEpoch;
             //create new epoch
             tempCurrentEpoch++;
         }
