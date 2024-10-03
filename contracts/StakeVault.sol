@@ -19,8 +19,11 @@ contract StakeVault is Ownable {
     error StakeVault__StakingFailed();
     error StakeVault__UnstakingFailed();
 
-    StakeManager private stakeManager;
+    //STAKED_TOKEN must be kept as an immutable, otherwise, StakeManager would accept StakeVaults with any token
+    //if is needed that STAKED_TOKEN to be a variable, StakeManager should be changed to check codehash and
+    //StakeVault(msg.sender).stakedToken()
     ERC20 public immutable STAKED_TOKEN;
+    StakeManager private stakeManager;
     uint256 public amountStaked = 0;
 
     /**
