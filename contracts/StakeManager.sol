@@ -35,7 +35,6 @@ contract StakeManager is TrustedCodehashAccess {
     }
 
     struct Epoch {
-        uint256 startTime;
         uint256 epochReward;
         uint256 totalSupply;
         uint256 estimatedMP;
@@ -118,18 +117,17 @@ contract StakeManager is TrustedCodehashAccess {
                 totalMPPerEpoch -= expiredMP;
                 expiredStakeStorage.deleteExpiredMP(tempCurrentEpoch);
             }
-            thisEpoch.estimatedMP = totalMPPerEpoch - currentEpochTotalExpiredMP;
-            delete currentEpochTotalExpiredMP;
-            pendingMPToBeMinted += thisEpoch.estimatedMP;
-
-            //finalize current epoch
+            uint256 epochEstimatedMP = totalMPPerEpoch;
             if (tempCurrentEpoch == currentEpoch) {
+                epochEstimatedMP -= currentEpochTotalExpiredMP;
+                currentEpochTotalExpiredMP = 0;
                 thisEpoch.epochReward = epochReward();
                 pendingReward += thisEpoch.epochReward;
             }
-            thisEpoch.totalSupply = totalSupply();
 
-            //create new epoch
+            pendingMPToBeMinted += epochEstimatedMP;
+            thisEpoch.estimatedMP = epochEstimatedMP;
+            thisEpoch.totalSupply = totalSupply();
             tempCurrentEpoch++;
         }
         currentEpoch = tempCurrentEpoch;
