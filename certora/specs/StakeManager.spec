@@ -75,6 +75,11 @@ invariant sumOfMultipliersIsMultiplierSupply()
   filtered {
     m -> !requiresPreviousManager(m) && !requiresNextManager(m)
   }
+  { preserved with (env e){
+    requireInvariant accountMPIsZeroIfBalanceIsZero(e.msg.sender);
+    requireInvariant accountBonusMPIsZeroIfBalanceIsZero(e.msg.sender);
+    }
+  }
 
 invariant sumOfEpochRewardsIsPendingRewards()
   sumOfEpochRewards == to_mathint(currentContract.pendingReward)
@@ -87,6 +92,12 @@ invariant highEpochsAreNull(uint256 epochNumber)
   epochNumber >= currentContract.currentEpoch => currentContract.epochs[epochNumber].epochReward == 0
   filtered {
     m -> !requiresPreviousManager(m) && !requiresNextManager(m)
+  }
+
+invariant accountBonusMPIsZeroIfBalanceIsZero(address addr)
+  to_mathint(getAccountBalance(addr)) == 0 => to_mathint(getAccountBonusMultiplierPoints(addr)) == 0
+  filtered {
+    f -> f.selector != sig:migrateFrom(address,bool,StakeManager.Account).selector
   }
 
 invariant accountMPIsZeroIfBalanceIsZero(address addr)
