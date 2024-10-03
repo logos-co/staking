@@ -61,7 +61,7 @@ hook Sstore accounts[KEY address addr].totalMP uint256 newValue (uint256 oldValu
 }
 
 hook Sload uint256 newValue accounts[KEY address addr].totalMP {
-    require sumOfBalances >= to_mathint(newValue);
+    require sumOfMultipliers >= to_mathint(newValue);
 }
 
 invariant sumOfBalancesIsTotalSupplyBalance()
