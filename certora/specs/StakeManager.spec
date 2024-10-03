@@ -75,6 +75,11 @@ invariant sumOfMultipliersIsMultiplierSupply()
   filtered {
     m -> !requiresPreviousManager(m) && !requiresNextManager(m)
   }
+  { preserved with (env e){
+    requireInvariant accountMPIsZeroIfBalanceIsZero(e.msg.sender);
+    requireInvariant accountBonusMPIsZeroIfBalanceIsZero(e.msg.sender);
+    }
+  }
 
 invariant sumOfEpochRewardsIsPendingRewards()
   sumOfEpochRewards == to_mathint(currentContract.pendingReward)
