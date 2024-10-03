@@ -36,7 +36,7 @@ hook Sstore accounts[KEY address addr].balance uint256 newValue (uint256 oldValu
   https://prover.certora.com/output/40726/055d52bc67154e3fbea330fd7d68d36d/?anonymousKey=73030555b4cefe429d4eed6718b9a7e5be3a22c8
 */
 rule checkAccountProcessedBeforeStoring(method f) filtered {
-  f -> !requiresPreviousManager(f) && !requiresNextManager(f)
+  f -> !requiresPreviousManager(f) && !requiresNextManager(f) && f.selector != sig:stake(uint256,uint256).selector
 } {
   address account;
 

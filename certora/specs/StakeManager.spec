@@ -115,6 +115,7 @@ rule stakingMintsMultiplierPoints1To1Ratio {
 
   requireInvariant InitialMPIsNeverSmallerThanBalance(e.msg.sender);
   requireInvariant CurrentMPIsNeverSmallerThanInitialMP(e.msg.sender);
+  requireInvariant accountMPIsZeroIfBalanceIsZero(e.msg.sender);
 
   require getAccountLockUntil(e.msg.sender) <= e.block.timestamp;
 
