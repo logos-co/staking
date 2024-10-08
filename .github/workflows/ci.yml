@@ -173,3 +173,4 @@ jobs:
           - verify:stake_manager
           - verify:stake_manager_process
           - verify:stake_manager_start_migration
+          - verify:max_mp_rule
