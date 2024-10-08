@@ -38,6 +38,7 @@
     "verify:stake_manager": "certoraRun certora/confs/StakeManager.conf",
     "verify:stake_manager_start_migration": "certoraRun certora/confs/StakeManagerStartMigration.conf",
     "verify:stake_manager_process": "certoraRun certora/confs/StakeManagerProcess.conf",
+    "verify:max_mp_rule": "certoraRun certora/confs/MaxMPRule.conf",
     "release": "commit-and-tag-version",
     "adorno": "pnpm prettier:write && forge fmt && pnpm gas-report"
   },

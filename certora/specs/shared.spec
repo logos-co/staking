@@ -39,4 +39,15 @@ function getAccountLockUntil(address addr) returns uint256 {
   return lockUntil;
 }
 
+invariant InitialMPIsNeverSmallerThanBalance(address addr)
+  to_mathint(getAccountBonusMultiplierPoints(addr)) >= to_mathint(getAccountBalance(addr))
+  filtered {
+    f -> f.selector != sig:_stakeManager.migrateFrom(address,bool,StakeManager.Account).selector
+  }
+
+invariant CurrentMPIsNeverSmallerThanInitialMP(address addr)
+  to_mathint(getAccountCurrentMultiplierPoints(addr)) >= to_mathint(getAccountBonusMultiplierPoints(addr))
+  filtered {
+    f -> f.selector != sig:_stakeManager.migrateFrom(address,bool,StakeManager.Account).selector
+  }
 
