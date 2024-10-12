@@ -4,14 +4,14 @@ using ERC20A as staked;
 
 methods {
   function staked.balanceOf(address) external returns (uint256) envfree;
-  function totalSupplyBalance() external returns (uint256) envfree;
-  function totalSupplyMP() external returns (uint256) envfree;
+  function totalStaked() external returns (uint256) envfree;
+  function totalMP() external returns (uint256) envfree;
   function totalMPPerEpoch() external returns (uint256) envfree;
   function accounts(address) external returns(address, uint256, uint256, uint256, uint256, uint256, uint256, uint256) envfree;
 
   function _processAccount(StakeManager.Account storage account, uint256 _limitEpoch) internal with(env e) => markAccountProccessed(e.msg.sender, _limitEpoch);
   function _.migrationInitialize(uint256,uint256,uint256,uint256,uint256,uint256,uint256) external => NONDET;
-  function pendingMPToBeMinted() external returns (uint256) envfree;
+  function potentialMP() external returns (uint256) envfree;
 }
 
 // keeps track of the last epoch an account was processed

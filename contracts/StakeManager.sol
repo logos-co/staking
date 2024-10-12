@@ -2,16 +2,16 @@
 
 pragma solidity ^0.8.18;
 
-import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 
 import { TrustedCodehashAccess } from "./access/TrustedCodehashAccess.sol";
 import { ExpiredStakeStorage } from "./storage/ExpiredStakeStorage.sol";
+import { IStakeManager } from "./IStakeManager.sol";
+import { MultiplierPointMath } from "./MultiplierPointMath.sol";
 import { StakeVault } from "./StakeVault.sol";
 
-contract StakeManager is TrustedCodehashAccess {
-    error StakeManager__FundsLocked();
-    error StakeManager__InvalidLockTime();
+contract StakeManager is IStakeManager, MultiplierPointMath, TrustedCodehashAccess {
     error StakeManager__NoPendingMigration();
     error StakeManager__PendingMigration();
     error StakeManager__SenderIsNotPreviousStakeManager();
@@ -19,9 +19,7 @@ contract StakeManager is TrustedCodehashAccess {
     error StakeManager__AccountNotInitialized();
     error StakeManager__InvalidMigration();
     error StakeManager__AlreadyProcessedEpochs();
-    error StakeManager__InsufficientFunds();
     error StakeManager__AlreadyStaked();
-    error StakeManager__StakeIsTooLow();
 
     struct Account {
         address rewardAddress;
@@ -37,15 +35,12 @@ contract StakeManager is TrustedCodehashAccess {
     struct Epoch {
         uint256 epochReward;
         uint256 totalSupply;
-        uint256 estimatedMP;
+        uint256 potentialMP;
     }
 
     uint256 public constant EPOCH_SIZE = 1 weeks;
-    uint256 public constant YEAR = 365 days;
     uint256 public constant MIN_LOCKUP_PERIOD = 2 weeks;
     uint256 public constant MAX_LOCKUP_PERIOD = 4 * YEAR; // 4 years
-    uint256 public constant MP_APY = 1;
-    uint256 public constant MAX_BOOST = 4;
 
     mapping(address index => Account value) public accounts;
     mapping(uint256 index => Epoch value) public epochs;
@@ -54,9 +49,9 @@ contract StakeManager is TrustedCodehashAccess {
     uint256 public pendingReward;
     uint256 public immutable startTime;
 
-    uint256 public pendingMPToBeMinted;
-    uint256 public totalSupplyMP;
-    uint256 public totalSupplyBalance;
+    uint256 public potentialMP;
+    uint256 public totalMP;
+    uint256 public totalStaked;
     uint256 public totalMPPerEpoch;
 
     ExpiredStakeStorage public expiredStakeStorage;
@@ -65,7 +60,7 @@ contract StakeManager is TrustedCodehashAccess {
 
     StakeManager public migration;
     StakeManager public immutable previousManager;
-    ERC20 public immutable stakedToken;
+    IERC20 public immutable rewardToken;
 
     modifier onlyAccountInitialized(address account) {
         if (accounts[account].lockUntil == 0) {
@@ -117,26 +112,26 @@ contract StakeManager is TrustedCodehashAccess {
                 totalMPPerEpoch -= expiredMP;
                 expiredStakeStorage.deleteExpiredMP(tempCurrentEpoch);
             }
-            uint256 epochEstimatedMP = totalMPPerEpoch;
+            uint256 epochPotentialMP = totalMPPerEpoch;
             if (tempCurrentEpoch == currentEpoch) {
-                epochEstimatedMP -= currentEpochTotalExpiredMP;
+                epochPotentialMP -= currentEpochTotalExpiredMP;
                 currentEpochTotalExpiredMP = 0;
                 thisEpoch.epochReward = epochReward();
                 pendingReward += thisEpoch.epochReward;
             }
 
-            pendingMPToBeMinted += epochEstimatedMP;
-            thisEpoch.estimatedMP = epochEstimatedMP;
+            potentialMP += epochPotentialMP;
+            thisEpoch.potentialMP = epochPotentialMP;
             thisEpoch.totalSupply = totalSupply();
             tempCurrentEpoch++;
         }
         currentEpoch = tempCurrentEpoch;
     }
 
-    constructor(address _stakedToken, address _previousManager) {
+    constructor(address _REWARD_TOKEN, address _previousManager) {
         startTime = (_previousManager == address(0)) ? block.timestamp : StakeManager(_previousManager).startTime();
         previousManager = StakeManager(_previousManager);
-        stakedToken = ERC20(_stakedToken);
+        rewardToken = IERC20(_REWARD_TOKEN);
         if (address(previousManager) != address(0)) {
             expiredStakeStorage = previousManager.expiredStakeStorage();
         } else {
@@ -147,36 +142,32 @@ contract StakeManager is TrustedCodehashAccess {
     /**
      * Increases balance of msg.sender;
      * @param _amount Amount of balance being staked.
-     * @param _secondsToLock Seconds of lockup time. 0 means no lockup.
+     * @param _seconds Seconds of lockup time. 0 means no lockup.
      *
      * @dev Reverts when resulting locked time is not in range of [MIN_LOCKUP_PERIOD, MAX_LOCKUP_PERIOD]
      * @dev Reverts when account has already staked funds.
      * @dev Reverts when amount staked results in less than 1 MP per epoch.
      */
-    function stake(uint256 _amount, uint256 _secondsToLock) external onlyTrustedCodehash noPendingMigration {
+    function stake(uint256 _amount, uint256 _seconds) external onlyTrustedCodehash noPendingMigration {
         finalizeEpoch(newEpoch());
         if (accounts[msg.sender].balance > 0) {
             revert StakeManager__AlreadyStaked();
         }
-        if (_secondsToLock != 0 && (_secondsToLock < MIN_LOCKUP_PERIOD || _secondsToLock > MAX_LOCKUP_PERIOD)) {
+        if (_seconds != 0 && (_seconds < MIN_LOCKUP_PERIOD || _seconds > MAX_LOCKUP_PERIOD)) {
             revert StakeManager__InvalidLockTime();
         }
 
         //mp estimation
-        uint256 mpPerEpoch = _getMPToMint(_amount, EPOCH_SIZE);
+        uint256 mpPerEpoch = _calculateAccuredMP(_amount, EPOCH_SIZE);
         if (mpPerEpoch < 1) {
             revert StakeManager__StakeIsTooLow();
         }
-        uint256 currentEpochExpiredMP = mpPerEpoch - _getMPToMint(_amount, epochEnd() - block.timestamp);
-        uint256 maxMpToMint = _getMPToMint(_amount, MAX_BOOST * YEAR) + currentEpochExpiredMP;
+        uint256 currentEpochExpiredMP = mpPerEpoch - _calculateAccuredMP(_amount, epochEnd() - block.timestamp);
+        uint256 maxMpToMint = _calculateMaxAccuredMP(_amount) + currentEpochExpiredMP;
         uint256 epochAmountToReachMpLimit = (maxMpToMint) / mpPerEpoch;
         uint256 mpLimitEpoch = currentEpoch + epochAmountToReachMpLimit;
         uint256 lastEpochAmountToMint = ((mpPerEpoch * (epochAmountToReachMpLimit + 1)) - maxMpToMint);
-        uint256 bonusMP = _amount;
-        if (_secondsToLock > 0) {
-            //bonus for lock time
-            bonusMP += _getMPToMint(_amount, _secondsToLock);
-        }
+        uint256 bonusMP = _calculateBonusMP(_amount, _seconds);
 
         // account initialization
         accounts[msg.sender] = Account({
@@ -185,14 +176,14 @@ contract StakeManager is TrustedCodehashAccess {
             bonusMP: bonusMP,
             totalMP: bonusMP,
             lastMint: block.timestamp,
-            lockUntil: block.timestamp + _secondsToLock,
+            lockUntil: block.timestamp + _seconds,
             epoch: currentEpoch,
             mpLimitEpoch: mpLimitEpoch
         });
 
         //update global storage
-        totalSupplyMP += bonusMP;
-        totalSupplyBalance += _amount;
+        totalMP += bonusMP;
+        totalStaked += _amount;
         currentEpochTotalExpiredMP += currentEpochExpiredMP;
         totalMPPerEpoch += mpPerEpoch;
         expiredStakeStorage.incrementExpiredMP(mpLimitEpoch, lastEpochAmountToMint);
@@ -221,7 +212,7 @@ contract StakeManager is TrustedCodehashAccess {
         uint256 reducedMP = Math.mulDiv(_amount, account.totalMP, account.balance);
         uint256 reducedInitialMP = Math.mulDiv(_amount, account.bonusMP, account.balance);
 
-        uint256 mpPerEpoch = _getMPToMint(account.balance, EPOCH_SIZE);
+        uint256 mpPerEpoch = _calculateAccuredMP(account.balance, EPOCH_SIZE);
         expiredStakeStorage.decrementExpiredMP(account.mpLimitEpoch, mpPerEpoch);
         if (account.mpLimitEpoch < currentEpoch) {
             totalMPPerEpoch -= mpPerEpoch;
@@ -231,18 +222,18 @@ contract StakeManager is TrustedCodehashAccess {
         account.balance -= _amount;
         account.bonusMP -= reducedInitialMP;
         account.totalMP -= reducedMP;
-        totalSupplyBalance -= _amount;
-        totalSupplyMP -= reducedMP;
+        totalStaked -= _amount;
+        totalMP -= reducedMP;
     }
 
     /**
      * @notice Locks entire balance for more amount of time.
-     * @param _secondsToIncreaseLock Seconds to increase in locked time. If stake is unlocked, increases from
+     * @param _secondsIncrease Seconds to increase in locked time. If stake is unlocked, increases from
      * block.timestamp.
      *
      * @dev Reverts when resulting locked time is not in range of [MIN_LOCKUP_PERIOD, MAX_LOCKUP_PERIOD]
      */
-    function lock(uint256 _secondsToIncreaseLock)
+    function lock(uint256 _secondsIncrease)
         external
         onlyTrustedCodehash
         onlyAccountInitialized(msg.sender)
@@ -255,11 +246,11 @@ contract StakeManager is TrustedCodehashAccess {
         uint256 deltaTime;
         if (lockUntil < block.timestamp) {
             //if unlocked, increase from now
-            lockUntil = block.timestamp + _secondsToIncreaseLock;
-            deltaTime = _secondsToIncreaseLock;
+            lockUntil = block.timestamp + _secondsIncrease;
+            deltaTime = _secondsIncrease;
         } else {
             //if locked, increase from lock until
-            lockUntil += _secondsToIncreaseLock;
+            lockUntil += _secondsIncrease;
             deltaTime = lockUntil - block.timestamp;
         }
         //checks if the lock time is in range
@@ -267,14 +258,14 @@ contract StakeManager is TrustedCodehashAccess {
             revert StakeManager__InvalidLockTime();
         }
         //mints bonus multiplier points for seconds increased
-        uint256 bonusMP = _getMPToMint(account.balance, _secondsToIncreaseLock);
+        uint256 bonusMP = _calculateAccuredMP(account.balance, _secondsIncrease);
 
         //update account storage
         account.lockUntil = lockUntil;
         account.bonusMP += bonusMP;
         account.totalMP += bonusMP;
         //update global storage
-        totalSupplyMP += bonusMP;
+        totalMP += bonusMP;
     }
 
     /**
@@ -331,16 +322,10 @@ contract StakeManager is TrustedCodehashAccess {
             revert StakeManager__InvalidMigration();
         }
         migration = _migration;
-        stakedToken.transfer(address(migration), epochReward());
+        rewardToken.transfer(address(migration), epochReward());
         expiredStakeStorage.transferOwnership(address(_migration));
         migration.migrationInitialize(
-            currentEpoch,
-            totalSupplyMP,
-            totalSupplyBalance,
-            startTime,
-            totalMPPerEpoch,
-            pendingMPToBeMinted,
-            currentEpochTotalExpiredMP
+            currentEpoch, totalMP, totalStaked, startTime, totalMPPerEpoch, potentialMP, currentEpochTotalExpiredMP
         );
     }
 
@@ -348,17 +333,17 @@ contract StakeManager is TrustedCodehashAccess {
      * @dev Callable automatically from old StakeManager.startMigration(address)
      * @notice Initilizes migration process
      * @param _currentEpoch epoch of old manager
-     * @param _totalSupplyMP MP supply on old manager
-     * @param _totalSupplyBalance stake supply on old manager
+     * @param _totalMP MP supply on old manager
+     * @param _totalStaked stake supply on old manager
      * @param _startTime start time of old manager
      */
     function migrationInitialize(
         uint256 _currentEpoch,
-        uint256 _totalSupplyMP,
-        uint256 _totalSupplyBalance,
+        uint256 _totalMP,
+        uint256 _totalStaked,
         uint256 _startTime,
         uint256 _totalMPPerEpoch,
-        uint256 _pendingMPToBeMinted,
+        uint256 _potentialMP,
         uint256 _currentEpochExpiredMP
     )
         external
@@ -372,10 +357,10 @@ contract StakeManager is TrustedCodehashAccess {
             revert StakeManager__InvalidMigration();
         }
         currentEpoch = _currentEpoch;
-        totalSupplyMP = _totalSupplyMP;
-        totalSupplyBalance = _totalSupplyBalance;
+        totalMP = _totalMP;
+        totalStaked = _totalStaked;
         totalMPPerEpoch = _totalMPPerEpoch;
-        pendingMPToBeMinted = _pendingMPToBeMinted;
+        potentialMP = _potentialMP;
         currentEpochTotalExpiredMP = _currentEpochExpiredMP;
     }
 
@@ -383,7 +368,7 @@ contract StakeManager is TrustedCodehashAccess {
      * @notice Transfer current epoch funds for migrated manager
      */
     function transferNonPending() external onlyPendingMigration {
-        stakedToken.transfer(address(migration), epochReward());
+        rewardToken.transfer(address(migration), epochReward());
     }
 
     /**
@@ -391,7 +376,7 @@ contract StakeManager is TrustedCodehashAccess {
      * @param _acceptMigration true if wants to migrate, false if wants to leave
      */
     function migrateTo(bool _acceptMigration)
-        external
+        internal
         onlyTrustedCodehash
         onlyAccountInitialized(msg.sender)
         onlyPendingMigration
@@ -399,11 +384,28 @@ contract StakeManager is TrustedCodehashAccess {
     {
         _processAccount(accounts[msg.sender], currentEpoch);
         Account memory account = accounts[msg.sender];
-        totalSupplyMP -= account.totalMP;
-        totalSupplyBalance -= account.balance;
+        totalMP -= account.totalMP;
+        totalStaked -= account.balance;
         delete accounts[msg.sender];
         migration.migrateFrom(msg.sender, _acceptMigration, account);
         return migration;
+    }
+
+    /**
+     * @notice Account accepts an update to new contract
+     * @return _migrated new manager
+     */
+    function acceptUpdate() external returns (IStakeManager _migrated) {
+        return migrateTo(true);
+    }
+
+    /**
+     * @notice Account leaves contract in case of a contract breach
+     * @return _leaveAccepted true if accepted
+     */
+    function leave() external returns (bool _leaveAccepted) {
+        migrateTo(false);
+        return true;
     }
 
     /**
@@ -417,8 +419,8 @@ contract StakeManager is TrustedCodehashAccess {
         if (_acceptMigration) {
             accounts[_vault] = _account;
         } else {
-            totalSupplyMP -= _account.totalMP;
-            totalSupplyBalance -= _account.balance;
+            totalMP -= _account.totalMP;
+            totalStaked -= _account.balance;
         }
     }
 
@@ -428,7 +430,7 @@ contract StakeManager is TrustedCodehashAccess {
      * @param _amount amount MP increased on account after migration initialized
      */
     function increaseTotalMP(uint256 _amount) external onlyPreviousManager {
-        totalSupplyMP += _amount;
+        totalMP += _amount;
     }
 
     /**
@@ -461,7 +463,7 @@ contract StakeManager is TrustedCodehashAccess {
         account.epoch = userEpoch;
         if (userReward > 0) {
             pendingReward -= userReward;
-            stakedToken.transfer(account.rewardAddress, userReward);
+            rewardToken.transfer(account.rewardAddress, userReward);
         }
         if (address(migration) != address(0)) {
             mpDifference = account.totalMP - mpDifference;
@@ -477,7 +479,7 @@ contract StakeManager is TrustedCodehashAccess {
      */
     function _mintMP(Account storage account, uint256 processTime, Epoch storage epoch) private {
         uint256 mpToMint = _getMaxMPToMint(
-            _getMPToMint(account.balance, processTime - account.lastMint),
+            _calculateAccuredMP(account.balance, processTime - account.lastMint),
             account.balance,
             account.bonusMP,
             account.totalMP
@@ -486,11 +488,11 @@ contract StakeManager is TrustedCodehashAccess {
         //update storage
         account.lastMint = processTime;
         account.totalMP += mpToMint;
-        totalSupplyMP += mpToMint;
+        totalMP += mpToMint;
 
         //mp estimation
-        epoch.estimatedMP -= mpToMint;
-        pendingMPToBeMinted -= mpToMint;
+        epoch.potentialMP -= mpToMint;
+        potentialMP -= mpToMint;
     }
 
     /**
@@ -512,7 +514,7 @@ contract StakeManager is TrustedCodehashAccess {
         returns (uint256 _maxMpToMint)
     {
         // Maximum multiplier point for given balance
-        _maxMpToMint = _getMPToMint(_balance, MAX_BOOST * YEAR) + _bonusMP;
+        _maxMpToMint = _calculateMaxAccuredMP(_balance) + _bonusMP;
         if (_mpToMint + _totalMP > _maxMpToMint) {
             //reached cap when increasing MP
             return _maxMpToMint - _totalMP; //how much left to reach cap
@@ -523,13 +525,12 @@ contract StakeManager is TrustedCodehashAccess {
     }
 
     /**
-     * @notice Calculates multiplier points to mint for given balance and time
-     * @param _balance balance of account
-     * @param _deltaTime time difference
-     * @return multiplier points to mint
+     * @notice Returns account balance
+     * @param _vault Account address
+     * @return _balance account balance
      */
-    function _getMPToMint(uint256 _balance, uint256 _deltaTime) private pure returns (uint256) {
-        return Math.mulDiv(_balance, _deltaTime, YEAR) * MP_APY;
+    function getStakedBalance(address _vault) external view returns (uint256 _balance) {
+        return accounts[_vault].balance;
     }
 
     /*
@@ -538,8 +539,8 @@ contract StakeManager is TrustedCodehashAccess {
      * @param _deltaTime time difference
      * @return multiplier points to mint
      */
-    function calculateMPToMint(uint256 _balance, uint256 _deltaTime) public pure returns (uint256) {
-        return _getMPToMint(_balance, _deltaTime);
+    function calculateMP(uint256 _balance, uint256 _deltaTime) public pure returns (uint256) {
+        return _calculateAccuredMP(_balance, _deltaTime);
     }
 
     /**
@@ -548,7 +549,7 @@ contract StakeManager is TrustedCodehashAccess {
      * @return _totalSupply current total supply
      */
     function totalSupply() public view returns (uint256 _totalSupply) {
-        return totalSupplyMP + totalSupplyBalance + pendingMPToBeMinted;
+        return totalMP + totalStaked + potentialMP;
     }
 
     /**
@@ -556,7 +557,7 @@ contract StakeManager is TrustedCodehashAccess {
      * @return _totalSupply current total supply
      */
     function totalSupplyMinted() public view returns (uint256 _totalSupply) {
-        return totalSupplyMP + totalSupplyBalance;
+        return totalMP + totalStaked;
     }
 
     /**
@@ -564,7 +565,7 @@ contract StakeManager is TrustedCodehashAccess {
      * @return _epochReward current epoch reward
      */
     function epochReward() public view returns (uint256 _epochReward) {
-        return stakedToken.balanceOf(address(this)) - pendingReward;
+        return rewardToken.balanceOf(address(this)) - pendingReward;
     }
 
     /**

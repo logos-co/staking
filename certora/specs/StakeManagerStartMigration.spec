@@ -5,13 +5,13 @@ using StakeManagerNew as newStakeManager;
 
 methods {
   function staked.balanceOf(address) external returns (uint256) envfree;
-  function totalSupplyBalance() external returns (uint256) envfree;
-  function totalSupplyMP() external returns (uint256) envfree;
+  function totalStaked() external returns (uint256) envfree;
+  function totalMP() external returns (uint256) envfree;
   function previousManager() external returns (address) envfree;
   function accounts(address) external returns(address, uint256, uint256, uint256, uint256, uint256, uint256, uint256) envfree;
 
   function _.migrationInitialize(uint256,uint256,uint256,uint256,uint256,uint256,uint256) external => DISPATCHER(true);
-  function StakeManagerNew.totalSupplyBalance() external returns (uint256) envfree;
+  function StakeManagerNew.totalStaked() external returns (uint256) envfree;
 }
 
 definition blockedWhenMigrating(method f) returns bool = (
@@ -25,7 +25,8 @@ definition blockedWhenMigrating(method f) returns bool = (
       );
 
 definition blockedWhenNotMigrating(method f) returns bool = (
-      f.selector == sig:migrateTo(bool).selector ||
+      f.selector == sig:acceptUpdate().selector ||
+      f.selector == sig:leave().selector ||
       f.selector == sig:transferNonPending().selector
       );
 
@@ -89,7 +90,7 @@ rule startMigrationCorrect {
   startMigration(e, newContract);
 
   assert currentContract.migration == newContract;
-  assert newStakeManager.totalSupplyBalance() == currentContract.totalSupplyBalance();
+  assert newStakeManager.totalStaked() == currentContract.totalStaked();
 }
 
 rule migrationLockedIn(method f) filtered {
