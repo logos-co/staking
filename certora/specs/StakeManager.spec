@@ -94,8 +94,14 @@ invariant highEpochsAreNull(uint256 epochNumber)
     m -> !requiresPreviousManager(m) && !requiresNextManager(m)
   }
 
-invariant accountBonusMPIsZeroIfBalanceIsZero(address addr)
-  to_mathint(getAccountBalance(addr)) == 0 => to_mathint(getAccountBonusMultiplierPoints(addr)) == 0
+invariant accountMPIsZeroIfBalanceIsZero(address addr)
+  to_mathint(getAccountBalance(addr)) == 0 => to_mathint(getAccountCurrentMultiplierPoints(addr)) == 0
+  filtered {
+    f -> f.selector != sig:migrateFrom(address,bool,StakeManager.Account).selector
+  }
+
+invariant InitialMPIsNeverSmallerThanBalance(address addr)
+  to_mathint(getAccountBonusMultiplierPoints(addr)) >= to_mathint(getAccountBalance(addr))
   filtered {
     f -> f.selector != sig:migrateFrom(address,bool,StakeManager.Account).selector
   }
