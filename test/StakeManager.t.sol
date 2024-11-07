@@ -7,7 +7,9 @@ import { Test, console } from "forge-std/Test.sol";
 import { Deploy } from "../script/Deploy.s.sol";
 import { DeployMigrationStakeManager } from "../script/DeployMigrationStakeManager.s.sol";
 import { DeploymentConfig } from "../script/DeploymentConfig.s.sol";
-import { TrustedCodehashAccess, StakeManager, ExpiredStakeStorage } from "../contracts/StakeManager.sol";
+import { StakeManager, IStakeManager, ExpiredStakeStorage } from "../contracts/StakeManager.sol";
+import { ITrustedCodehashAccess } from "../contracts/access/ITrustedCodehashAccess.sol";
+import { MultiplierPointMath } from "../contracts/MultiplierPointMath.sol";
 import { StakeVault } from "../contracts/StakeVault.sol";
 import { VaultFactory } from "../contracts/VaultFactory.sol";
 
@@ -31,9 +33,9 @@ contract StakeManagerTest is Test {
         assertEq(stakeManager.owner(), deployer);
         assertEq(stakeManager.currentEpoch(), 0);
         assertEq(stakeManager.pendingReward(), 0);
-        assertEq(stakeManager.totalSupplyMP(), 0);
-        assertEq(stakeManager.totalSupplyBalance(), 0);
-        assertEq(address(stakeManager.stakedToken()), stakeToken);
+        assertEq(stakeManager.totalMP(), 0);
+        assertEq(stakeManager.totalStaked(), 0);
+        assertEq(address(stakeManager.rewardToken()), stakeToken);
         assertEq(address(stakeManager.previousManager()), address(0));
         assertEq(stakeManager.totalSupply(), 0);
     }
@@ -83,7 +85,7 @@ contract StakeManagerTest is Test {
 
 contract StakeTest is StakeManagerTest {
     function test_RevertWhen_SenderIsNotVault() public {
-        vm.expectRevert(TrustedCodehashAccess.TrustedCodehashAccess__UnauthorizedCodehash.selector);
+        vm.expectRevert(ITrustedCodehashAccess.TrustedCodehashAccess__UnauthorizedCodehash.selector);
         stakeManager.stake(100, 1);
     }
 
@@ -96,11 +98,13 @@ contract StakeTest is StakeManagerTest {
         (, uint256 balance, uint256 bonusMP, uint256 totalMP,,,,) = stakeManager.accounts(address(userVault));
         assertEq(balance, stakeAmount, "balance of user vault should be equal to stake amount after stake");
         assertEq(bonusMP, stakeAmount, "bonusMP of user vault should be equal to stake amount after stake if no lock");
-        assertEq(totalMP, bonusMP, "totalMP of user vault should be equal to bonusMP after stake if no epochs passed");
+        assertEq(
+            totalMP, stakeAmount, "totalMP of user vault should be equal to stakeAmount after stake if no epochs passed"
+        );
 
         vm.prank(testUser);
         userVault.lock(lockTime);
-        uint256 estimatedBonusMp = stakeAmount + stakeManager.calculateMPToMint(stakeAmount, lockTime);
+        uint256 estimatedBonusMp = stakeAmount + stakeManager.calculateMP(stakeAmount, lockTime);
 
         (, balance, bonusMP, totalMP,,,,) = stakeManager.accounts(address(userVault));
         assertEq(balance, stakeAmount, "balance of user vault should be equal to stake amount after lock");
@@ -128,18 +132,18 @@ contract StakeTest is StakeManagerTest {
         ERC20(stakeToken).approve(address(userVault), 100);
 
         uint256 lockTime = stakeManager.MIN_LOCKUP_PERIOD() - 1;
-        vm.expectRevert(StakeManager.StakeManager__InvalidLockTime.selector);
+        vm.expectRevert(IStakeManager.StakeManager__InvalidLockTime.selector);
         userVault.stake(100, lockTime);
 
         lockTime = stakeManager.MAX_LOCKUP_PERIOD() + 1;
-        vm.expectRevert(StakeManager.StakeManager__InvalidLockTime.selector);
+        vm.expectRevert(IStakeManager.StakeManager__InvalidLockTime.selector);
         userVault.stake(100, lockTime);
     }
 
     function test_RevertWhen_StakeIsTooLow() public {
         StakeVault userVault = _createTestVault(testUser);
         vm.startPrank(testUser);
-        vm.expectRevert(StakeManager.StakeManager__StakeIsTooLow.selector);
+        vm.expectRevert(IStakeManager.StakeManager__StakeIsTooLow.selector);
         userVault.stake(0, 0);
     }
 
@@ -173,21 +177,21 @@ contract StakeTest is StakeManagerTest {
         StakeVault userVault = _createStakingAccount(testUser, stakeAmount, 0, stakeAmount);
 
         (,, uint256 totalMP,,,,,) = stakeManager.accounts(address(userVault));
-        assertEq(stakeManager.totalSupplyMP(), stakeAmount, "total multiplier point supply");
+        assertEq(stakeManager.totalMP(), stakeAmount, "total multiplier point supply");
         assertEq(totalMP, stakeAmount, "user multiplier points");
 
         vm.prank(testUser);
         userVault.unstake(stakeAmount);
 
         (,,, totalMP,,,,) = stakeManager.accounts(address(userVault));
-        assertEq(stakeManager.totalSupplyMP(), 0, "totalSupplyMP burned after unstaking");
+        assertEq(stakeManager.totalMP(), 0, "totalMP burned after unstaking");
         assertEq(totalMP, 0, "userMP burned after unstaking");
     }
 }
 
 contract UnstakeTest is StakeManagerTest {
     function test_RevertWhen_SenderIsNotVault() public {
-        vm.expectRevert(TrustedCodehashAccess.TrustedCodehashAccess__UnauthorizedCodehash.selector);
+        vm.expectRevert(ITrustedCodehashAccess.TrustedCodehashAccess__UnauthorizedCodehash.selector);
         stakeManager.unstake(1);
     }
 
@@ -198,11 +202,11 @@ contract UnstakeTest is StakeManagerTest {
         StakeVault userVault = _createStakingAccount(testUser, stakeAmount, lockTime, mintAmount);
 
         vm.prank(testUser);
-        vm.expectRevert(StakeManager.StakeManager__FundsLocked.selector);
+        vm.expectRevert(IStakeManager.StakeManager__FundsLocked.selector);
         userVault.unstake(1);
 
         vm.prank(testUser);
-        vm.expectRevert(StakeManager.StakeManager__FundsLocked.selector);
+        vm.expectRevert(IStakeManager.StakeManager__FundsLocked.selector);
         userVault.unstake(stakeAmount);
     }
 
@@ -216,7 +220,7 @@ contract UnstakeTest is StakeManagerTest {
         vm.prank(testUser);
         userVault.unstake(100);
 
-        assertEq(stakeManager.totalSupplyBalance(), 0);
+        assertEq(stakeManager.totalStaked(), 0);
         assertEq(ERC20(stakeToken).balanceOf(address(userVault)), 0);
         assertEq(ERC20(stakeToken).balanceOf(testUser), 1000);
     }
@@ -233,7 +237,7 @@ contract UnstakeTest is StakeManagerTest {
         vm.prank(testUser);
         userVault.unstake(100);
 
-        assertEq(stakeManager.totalSupplyBalance(), 0);
+        assertEq(stakeManager.totalStaked(), 0);
         assertEq(ERC20(stakeToken).balanceOf(address(userVault)), 0);
         assertEq(ERC20(stakeToken).balanceOf(testUser), 1000);
     }
@@ -245,14 +249,14 @@ contract UnstakeTest is StakeManagerTest {
 
         vm.startPrank(testUser);
 
-        assertEq(stakeManager.totalSupplyMP(), stakeAmount);
+        assertEq(stakeManager.totalMP(), stakeAmount);
         for (uint256 i = 0; i < 53; i++) {
             vm.warp(stakeManager.epochEnd());
             stakeManager.executeAccount(address(userVault), i + 1);
         }
         (, uint256 balanceBefore, uint256 bonusMPBefore, uint256 totalMPBefore,,,,) =
             stakeManager.accounts(address(userVault));
-        uint256 totalSupplyMPBefore = stakeManager.totalSupplyMP();
+        uint256 totalSupplyMPBefore = stakeManager.totalMP();
         uint256 unstakeAmount = stakeAmount * percentToBurn / 100;
         console.log("unstake", unstakeAmount);
 
@@ -261,7 +265,7 @@ contract UnstakeTest is StakeManagerTest {
         (, uint256 balanceAfter, uint256 bonusMPAfter, uint256 totalMPAfter,,,,) =
             stakeManager.accounts(address(userVault));
 
-        uint256 totalSupplyMPAfter = stakeManager.totalSupplyMP();
+        uint256 totalSupplyMPAfter = stakeManager.totalMP();
         console.log("totalSupplyMPBefore", totalSupplyMPBefore);
         console.log("totalSupplyMPAfter", totalSupplyMPAfter);
         console.log("balanceBefore", balanceBefore);
@@ -282,14 +286,14 @@ contract UnstakeTest is StakeManagerTest {
         uint256 stakeAmount = 1000;
         StakeVault userVault = _createStakingAccount(testUser, stakeAmount);
         vm.startPrank(testUser);
-        vm.expectRevert(StakeManager.StakeManager__InsufficientFunds.selector);
+        vm.expectRevert(IStakeManager.StakeManager__InsufficientFunds.selector);
         userVault.unstake(stakeAmount + 1);
     }
 }
 
 contract LockTest is StakeManagerTest {
     function test_RevertWhen_SenderIsNotVault() public {
-        vm.expectRevert(TrustedCodehashAccess.TrustedCodehashAccess__UnauthorizedCodehash.selector);
+        vm.expectRevert(ITrustedCodehashAccess.TrustedCodehashAccess__UnauthorizedCodehash.selector);
         stakeManager.lock(100);
     }
 
@@ -312,7 +316,7 @@ contract LockTest is StakeManagerTest {
 
         uint256 lockTime = stakeManager.MAX_LOCKUP_PERIOD() + 1;
         vm.startPrank(testUser);
-        vm.expectRevert(StakeManager.StakeManager__InvalidLockTime.selector);
+        vm.expectRevert(IStakeManager.StakeManager__InvalidLockTime.selector);
         userVault.lock(lockTime);
     }
 
@@ -345,7 +349,7 @@ contract LockTest is StakeManagerTest {
         (,,,,, uint256 lockUntil,,) = stakeManager.accounts(address(userVault));
         console.log(lockUntil);
         vm.startPrank(testUser);
-        vm.expectRevert(StakeManager.StakeManager__InvalidLockTime.selector);
+        vm.expectRevert(IStakeManager.StakeManager__InvalidLockTime.selector);
         userVault.lock(minLockup - 1);
     }
 
@@ -354,15 +358,15 @@ contract LockTest is StakeManagerTest {
         uint256 lockTime = stakeManager.MAX_LOCKUP_PERIOD();
         StakeVault userVault = _createStakingAccount(testUser, stakeAmount);
         (, uint256 balance, uint256 bonusMP, uint256 totalMP,,,,) = stakeManager.accounts(address(userVault));
-        uint256 totalSupplyMPBefore = stakeManager.totalSupplyMP();
+        uint256 totalSupplyMPBefore = stakeManager.totalMP();
 
         vm.startPrank(testUser);
         userVault.lock(lockTime);
 
         //solhint-disable-next-line max-line-length
         (, uint256 newBalance, uint256 newBonusMP, uint256 newCurrentMP,,,,) = stakeManager.accounts(address(userVault));
-        uint256 totalSupplyMPAfter = stakeManager.totalSupplyMP();
-        assertGt(totalSupplyMPAfter, totalSupplyMPBefore, "totalSupplyMP");
+        uint256 totalSupplyMPAfter = stakeManager.totalMP();
+        assertGt(totalSupplyMPAfter, totalSupplyMPBefore, "totalMP");
         assertGt(newBonusMP, bonusMP, "bonusMP");
         assertGt(newCurrentMP, totalMP, "totalMP");
         assertEq(newBalance, balance, "balance");
@@ -371,8 +375,8 @@ contract LockTest is StakeManagerTest {
 
 contract LeaveTest is StakeManagerTest {
     function test_RevertWhen_SenderIsNotVault() public {
-        vm.expectRevert(TrustedCodehashAccess.TrustedCodehashAccess__UnauthorizedCodehash.selector);
-        stakeManager.migrateTo(false);
+        vm.expectRevert(ITrustedCodehashAccess.TrustedCodehashAccess__UnauthorizedCodehash.selector);
+        stakeManager.leave();
     }
 
     function test_RevertWhen_NoPendingMigration() public {
@@ -393,8 +397,8 @@ contract LeaveTest is StakeManagerTest {
 
 contract MigrateTest is StakeManagerTest {
     function test_RevertWhen_SenderIsNotVault() public {
-        vm.expectRevert(TrustedCodehashAccess.TrustedCodehashAccess__UnauthorizedCodehash.selector);
-        stakeManager.migrateTo(true);
+        vm.expectRevert(ITrustedCodehashAccess.TrustedCodehashAccess__UnauthorizedCodehash.selector);
+        stakeManager.acceptUpdate();
     }
 
     function test_RevertWhen_NoPendingMigration() public {
@@ -431,8 +435,8 @@ contract MigrationInitializeTest is StakeManagerTest {
         secondStakeManager.startMigration(thirdStakeManager);
 
         uint256 currentEpoch = stakeManager.currentEpoch();
-        uint256 totalMP = stakeManager.totalSupplyMP();
-        uint256 totalBalance = stakeManager.totalSupplyBalance();
+        uint256 totalMP = stakeManager.totalMP();
+        uint256 totalBalance = stakeManager.totalStaked();
 
         // `stakeManager` calling `migrationInitialize` while the new stake manager is
         // in migration itself, should revert
@@ -514,7 +518,7 @@ contract ExecuteAccountTest is StakeManagerTest {
 
         //expected MP is, the starting totalMP + the calculatedMPToMint of user balance for one EPOCH_SIZE multiplied by
         // 2.
-        uint256 expectedMP = totalMP + (stakeManager.calculateMPToMint(stakeAmount, stakeManager.EPOCH_SIZE()) * 2);
+        uint256 expectedMP = totalMP + (stakeManager.calculateMP(stakeAmount, stakeManager.EPOCH_SIZE()) * 2);
         stakeManager.executeAccount(address(userVaults[0]), stakeManager.currentEpoch() + 1);
         (,,, totalMP, lastMint,, epoch,) = stakeManager.accounts(address(userVaults[0]));
 
@@ -579,9 +583,9 @@ contract ExecuteAccountTest is StakeManagerTest {
     function test_ShouldNotMintMoreThanCap() public {
         uint256 stakeAmount = 10_000_000_000;
 
-        uint256 epochsAmountToReachCap = stakeManager.calculateMPToMint(
-            stakeAmount, stakeManager.MAX_BOOST() * stakeManager.YEAR()
-        ) / stakeManager.calculateMPToMint(stakeAmount, stakeManager.EPOCH_SIZE());
+        uint256 epochsAmountToReachCap = stakeManager.calculateMP(
+            stakeAmount, stakeManager.MAX_MULTIPLIER() * stakeManager.YEAR()
+        ) / stakeManager.calculateMP(stakeAmount, stakeManager.EPOCH_SIZE());
 
         deal(stakeToken, testUser, stakeAmount);
 
@@ -673,17 +677,17 @@ contract UserFlowsTest is StakeManagerTest {
 
         assertEq(ERC20(stakeToken).balanceOf(address(userVault)), 100);
         assertEq(ERC20(stakeToken).balanceOf(address(user2Vault)), 100);
-        assertEq(stakeManager.totalSupplyBalance(), 200);
+        assertEq(stakeManager.totalStaked(), 200);
 
         vm.startPrank(testUser);
         userVault.unstake(100);
         assertEq(ERC20(stakeToken).balanceOf(address(userVault)), 0);
-        assertEq(stakeManager.totalSupplyBalance(), 100);
+        assertEq(stakeManager.totalStaked(), 100);
 
         vm.startPrank(testUser2);
         user2Vault.unstake(100);
         assertEq(ERC20(stakeToken).balanceOf(address(user2Vault)), 0);
-        assertEq(stakeManager.totalSupplyBalance(), 0);
+        assertEq(stakeManager.totalStaked(), 0);
     }
 
     function test_StakeWithLockUpTimeLocksStake() public {
@@ -694,7 +698,7 @@ contract UserFlowsTest is StakeManagerTest {
         vm.startPrank(testUser);
 
         // unstaking should fail as lockup time isn't over yet
-        vm.expectRevert(StakeManager.StakeManager__FundsLocked.selector);
+        vm.expectRevert(IStakeManager.StakeManager__FundsLocked.selector);
         userVault.unstake(100);
 
         // fast forward 12 weeks
@@ -702,7 +706,7 @@ contract UserFlowsTest is StakeManagerTest {
 
         userVault.unstake(100);
         assertEq(ERC20(stakeToken).balanceOf(address(userVault)), 0);
-        assertEq(stakeManager.totalSupplyBalance(), 0);
+        assertEq(stakeManager.totalStaked(), 0);
     }
 
     function test_PendingMPToBeMintedCannotBeGreaterThanTotalSupplyMP(
@@ -722,30 +726,30 @@ contract UserFlowsTest is StakeManagerTest {
             userVaults.push(
                 _createStakingAccount(makeAddr(string(abi.encode(keccak256(abi.encode(accountNum))))), thisAccStake, 0)
             );
-            uint256 thisAccReachCapIn = stakeManager.calculateMPToMint(
-                thisAccStake, stakeManager.MAX_BOOST() * stakeManager.YEAR()
-            ) / stakeManager.calculateMPToMint(thisAccStake, stakeManager.EPOCH_SIZE());
+            uint256 thisAccReachCapIn = stakeManager.calculateMP(
+                thisAccStake, stakeManager.MAX_MULTIPLIER() * stakeManager.YEAR()
+            ) / stakeManager.calculateMP(thisAccStake, stakeManager.EPOCH_SIZE());
             if (thisAccReachCapIn > epochsAmountToReachCap) {
                 epochsAmountToReachCap = thisAccReachCapIn; //uses the amount to reach cap from the account that takes
                     // longer to reach cap
             }
         }
 
-        //tests up to epochs to reach MAX_BOOST + 10 epochs
+        //tests up to epochs to reach MAX_MULTIPLIER + 10 epochs
         for (uint256 i = 0; i < epochsAmountToReachCap + 10; i++) {
             vm.warp(stakeManager.epochEnd());
             stakeManager.executeEpoch();
-            uint256 pendingMPToBeMintedBefore = stakeManager.pendingMPToBeMinted();
-            uint256 totalSupplyMP = stakeManager.totalSupplyMP();
+            uint256 pendingMPToBeMintedBefore = stakeManager.potentialMP();
+            uint256 totalMP = stakeManager.totalMP();
             for (uint256 j = 0; j < userVaults.length; j++) {
                 (,,, uint256 totalMPBefore, uint256 lastMintBefore,, uint256 epochBefore,) =
                     stakeManager.accounts(address(userVaults[j]));
 
                 stakeManager.executeAccount(address(userVaults[j]), epochBefore + 1);
             }
-            uint256 pendingMPToBeMintedAfter = stakeManager.pendingMPToBeMinted();
+            uint256 pendingMPToBeMintedAfter = stakeManager.potentialMP();
 
-            assertEq(pendingMPToBeMintedBefore + totalSupplyMP, stakeManager.totalSupplyMP());
+            assertEq(pendingMPToBeMintedBefore + totalMP, stakeManager.totalMP());
             assertEq(pendingMPToBeMintedAfter, 0);
         }
     }
@@ -764,9 +768,9 @@ contract MigrationStakeManagerTest is StakeManagerTest {
         assertEq(newStakeManager.owner(), deployer);
         assertEq(newStakeManager.currentEpoch(), 0);
         assertEq(newStakeManager.pendingReward(), 0);
-        assertEq(newStakeManager.totalSupplyMP(), 0);
-        assertEq(newStakeManager.totalSupplyBalance(), 0);
-        assertEq(address(newStakeManager.stakedToken()), stakeToken);
+        assertEq(newStakeManager.totalMP(), 0);
+        assertEq(newStakeManager.totalStaked(), 0);
+        assertEq(address(newStakeManager.rewardToken()), stakeToken);
         assertEq(address(newStakeManager.previousManager()), address(stakeManager));
         assertEq(newStakeManager.totalSupply(), 0);
     }

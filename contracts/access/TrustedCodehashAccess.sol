@@ -2,6 +2,7 @@
 pragma solidity ^0.8.18;
 
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
+import { ITrustedCodehashAccess } from "./ITrustedCodehashAccess.sol";
 
 /**
  * @title TrustedCodehashAccess
@@ -9,11 +10,7 @@ import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
  * @notice Ensures that only specific contract bytecode hashes are trusted to
  *         interact with the functions using the `onlyTrustedCodehash` modifier.
  */
-contract TrustedCodehashAccess is Ownable {
-    error TrustedCodehashAccess__UnauthorizedCodehash();
-
-    event TrustedCodehashUpdated(bytes32 indexed codehash, bool trusted);
-
+contract TrustedCodehashAccess is ITrustedCodehashAccess, Ownable {
     mapping(bytes32 codehash => bool permission) private trustedCodehashes;
 
     /**
