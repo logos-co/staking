@@ -7,7 +7,8 @@ definition requiresPreviousManager(method f) returns bool = (
   );
 
 definition requiresNextManager(method f) returns bool = (
-  f.selector == sig:_stakeManager.migrateTo(bool).selector ||
+  f.selector == sig:_stakeManager.acceptUpdate().selector ||
+  f.selector == sig:_stakeManager.leave().selector ||
   f.selector == sig:_stakeManager.transferNonPending().selector
   );
 

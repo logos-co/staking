@@ -3,8 +3,8 @@
 pragma solidity ^0.8.18;
 
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
-import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
-import { StakeManager } from "./StakeManager.sol";
+import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import { IStakeManager } from "./IStakeManager.sol";
 
 /**
  * @title StakeVault
@@ -18,20 +18,20 @@ contract StakeVault is Ownable {
 
     error StakeVault__UnstakingFailed();
 
-    StakeManager private stakeManager;
+    IStakeManager private stakeManager;
 
-    ERC20 public immutable STAKED_TOKEN;
+    IERC20 public immutable stakedToken;
 
     event Staked(address from, address to, uint256 _amount, uint256 time);
 
-    constructor(address _owner, ERC20 _stakedToken, StakeManager _stakeManager) {
+    constructor(address _owner, IERC20 _stakedToken, IStakeManager _stakeManager) {
         _transferOwnership(_owner);
-        STAKED_TOKEN = _stakedToken;
+        stakedToken = _stakedToken;
         stakeManager = _stakeManager;
     }
 
     function stake(uint256 _amount, uint256 _time) external onlyOwner {
-        bool success = STAKED_TOKEN.transferFrom(msg.sender, address(this), _amount);
+        bool success = stakedToken.transferFrom(msg.sender, address(this), _amount);
         if (!success) {
             revert StakeVault__StakingFailed();
         }
@@ -46,27 +46,24 @@ contract StakeVault is Ownable {
 
     function unstake(uint256 _amount) external onlyOwner {
         stakeManager.unstake(_amount);
-        bool success = STAKED_TOKEN.transfer(msg.sender, _amount);
+        bool success = stakedToken.transfer(msg.sender, _amount);
         if (!success) {
             revert StakeVault__UnstakingFailed();
         }
     }
 
     function leave() external onlyOwner {
-        stakeManager.migrateTo(false);
-        STAKED_TOKEN.transferFrom(address(this), msg.sender, STAKED_TOKEN.balanceOf(address(this)));
+        if (stakeManager.leave()) {
+            stakedToken.transferFrom(address(this), msg.sender, stakedToken.balanceOf(address(this)));
+        }
     }
 
     /**
-     * @notice Opt-in migration to a new StakeManager contract.
+     * @notice Opt-in migration to a new IStakeManager contract.
      */
     function acceptMigration() external onlyOwner {
-        StakeManager migrated = stakeManager.migrateTo(true);
+        IStakeManager migrated = stakeManager.acceptUpdate();
         if (address(migrated) == address(0)) revert StakeVault__MigrationNotAvailable();
         stakeManager = migrated;
-    }
-
-    function stakedToken() external view returns (ERC20) {
-        return STAKED_TOKEN;
     }
 }

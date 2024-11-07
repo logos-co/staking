@@ -4,8 +4,8 @@ using ERC20A as staked;
 
 methods {
   function staked.balanceOf(address) external returns (uint256) envfree;
-  function totalSupplyBalance() external returns (uint256) envfree;
-  function totalSupplyMP() external returns (uint256) envfree;
+  function totalStaked() external returns (uint256) envfree;
+  function totalMP() external returns (uint256) envfree;
   function previousManager() external returns (address) envfree;
   function _.migrateFrom(address, bool, StakeManager.Account) external => NONDET;
   function _.increaseTotalMP(uint256) external => NONDET;
@@ -22,7 +22,8 @@ function mulDivSummary(uint256 a, uint256 b, uint256 c) returns uint256 {
 
 function isMigrationfunction(method f) returns bool {
   return
-          f.selector == sig:migrateTo(bool).selector ||
+          f.selector == sig:acceptUpdate().selector ||
+          f.selector == sig:leave().selector ||
           f.selector == sig:transferNonPending().selector;
 }
 
@@ -65,13 +66,13 @@ hook Sload uint256 newValue accounts[KEY address addr].totalMP {
 }
 
 invariant sumOfBalancesIsTotalSupplyBalance()
-  sumOfBalances == to_mathint(totalSupplyBalance())
+  sumOfBalances == to_mathint(totalStaked())
   filtered {
     m -> !requiresPreviousManager(m) && !requiresNextManager(m)
   }
 
 invariant sumOfMultipliersIsMultiplierSupply()
-  sumOfMultipliers == to_mathint(totalSupplyMP())
+  sumOfMultipliers == to_mathint(totalMP())
   filtered {
     m -> !requiresPreviousManager(m) && !requiresNextManager(m)
   }
