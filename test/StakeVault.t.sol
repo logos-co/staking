@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.19;
+pragma solidity ^0.8.26;
 
 import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
@@ -42,7 +42,7 @@ contract StakedTokenTest is StakeVaultTest {
     }
 
     function testStakeToken() public {
-        assertEq(address(stakeVault.stakedToken()), stakeToken);
+        assertEq(address(stakeVault.STAKING_TOKEN()), stakeToken);
     }
 }
 

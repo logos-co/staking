@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.19;
+pragma solidity ^0.8.26;
 
 import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
@@ -35,7 +35,7 @@ contract StakeManagerTest is Test {
         assertEq(stakeManager.pendingReward(), 0);
         assertEq(stakeManager.totalMP(), 0);
         assertEq(stakeManager.totalStaked(), 0);
-        assertEq(address(stakeManager.rewardToken()), stakeToken);
+        assertEq(address(stakeManager.REWARD_TOKEN()), stakeToken);
         assertEq(address(stakeManager.previousManager()), address(0));
         assertEq(stakeManager.totalSupply(), 0);
     }
@@ -770,7 +770,7 @@ contract MigrationStakeManagerTest is StakeManagerTest {
         assertEq(newStakeManager.pendingReward(), 0);
         assertEq(newStakeManager.totalMP(), 0);
         assertEq(newStakeManager.totalStaked(), 0);
-        assertEq(address(newStakeManager.rewardToken()), stakeToken);
+        assertEq(address(newStakeManager.REWARD_TOKEN()), stakeToken);
         assertEq(address(newStakeManager.previousManager()), address(stakeManager));
         assertEq(newStakeManager.totalSupply(), 0);
     }

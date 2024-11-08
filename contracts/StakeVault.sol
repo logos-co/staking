@@ -1,10 +1,11 @@
 // SPDX-License-Identifier: MIT
 
-pragma solidity ^0.8.18;
+pragma solidity ^0.8.26;
 
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { IStakeManager } from "./IStakeManager.sol";
+import { StakeManager } from "./StakeManager.sol";
 
 /**
  * @title StakeVault
@@ -20,18 +21,18 @@ contract StakeVault is Ownable {
 
     IStakeManager private stakeManager;
 
-    IERC20 public immutable stakedToken;
+    IERC20 public immutable STAKING_TOKEN;
 
     event Staked(address from, address to, uint256 _amount, uint256 time);
 
-    constructor(address _owner, IERC20 _stakedToken, IStakeManager _stakeManager) {
+    constructor(address _owner, IERC20 _STAKING_TOKEN, IStakeManager _stakeManager) {
         _transferOwnership(_owner);
-        stakedToken = _stakedToken;
+        STAKING_TOKEN = _STAKING_TOKEN;
         stakeManager = _stakeManager;
     }
 
     function stake(uint256 _amount, uint256 _time) external onlyOwner {
-        bool success = stakedToken.transferFrom(msg.sender, address(this), _amount);
+        bool success = STAKING_TOKEN.transferFrom(msg.sender, address(this), _amount);
         if (!success) {
             revert StakeVault__StakingFailed();
         }
@@ -46,15 +47,15 @@ contract StakeVault is Ownable {
 
     function unstake(uint256 _amount) external onlyOwner {
         stakeManager.unstake(_amount);
-        bool success = stakedToken.transfer(msg.sender, _amount);
+        bool success = STAKING_TOKEN.transfer(msg.sender, _amount);
         if (!success) {
             revert StakeVault__UnstakingFailed();
         }
     }
 
     function leave() external onlyOwner {
-        if (stakeManager.leave()) {
-            stakedToken.transferFrom(address(this), msg.sender, stakedToken.balanceOf(address(this)));
+        if (StakeManager(stakeManager).leave()) {
+            STAKING_TOKEN.transferFrom(address(this), msg.sender, STAKING_TOKEN.balanceOf(address(this)));
         }
     }
 
@@ -62,7 +63,7 @@ contract StakeVault is Ownable {
      * @notice Opt-in migration to a new IStakeManager contract.
      */
     function acceptMigration() external onlyOwner {
-        IStakeManager migrated = stakeManager.acceptUpdate();
+        IStakeManager migrated = StakeManager(stakeManager).acceptUpdate();
         if (address(migrated) == address(0)) revert StakeVault__MigrationNotAvailable();
         stakeManager = migrated;
     }

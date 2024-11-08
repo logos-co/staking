@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity >=0.8.19 <=0.9.0;
+pragma solidity >=0.8.26 <=0.9.0;
 
 import { BaseScript } from "./Base.s.sol";
 import { StakeManager } from "../contracts/StakeManager.sol";
@@ -18,7 +18,7 @@ contract DeployMigrationStakeManager is BaseScript {
 
     function run() public returns (StakeManager) {
         prevStakeManager = vm.envOr({ name: "PREV_STAKE_MANAGER", defaultValue: prevStakeManager });
-        stakeToken = vm.envOr({ name: "STAKE_TOKEN_ADDRESS", defaultValue: stakeToken });
+        stakeToken = vm.envOr({ name: "STAKING_TOKEN_ADDRESS", defaultValue: stakeToken });
 
         if (stakeToken == address(0)) {
             revert DeployMigrationStakeManager_InvalidStakeTokenAddress();
