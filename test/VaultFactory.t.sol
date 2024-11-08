@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: UNLICENSED
-pragma solidity ^0.8.19;
+pragma solidity ^0.8.26;
 
 import { Test } from "forge-std/Test.sol";
 import { Deploy } from "../script/Deploy.s.sol";
@@ -18,14 +18,14 @@ contract VaultFactoryTest is Test {
 
     address internal deployer;
 
-    address internal stakedToken;
+    address internal STAKING_TOKEN;
 
     address internal testUser = makeAddr("testUser");
 
     function setUp() public virtual {
         Deploy deployment = new Deploy();
         (vaultFactory, stakeManager, deploymentConfig) = deployment.run();
-        (deployer, stakedToken) = deploymentConfig.activeNetworkConfig();
+        (deployer, STAKING_TOKEN) = deploymentConfig.activeNetworkConfig();
     }
 
     function testDeployment() public {
@@ -67,6 +67,6 @@ contract CreateVaultTest is VaultFactoryTest {
         emit VaultCreated(makeAddr("some address"), testUser);
         StakeVault vault = vaultFactory.createVault();
         assertEq(vault.owner(), testUser);
-        assertEq(address(vault.stakedToken()), address(stakedToken));
+        assertEq(address(vault.STAKING_TOKEN()), address(STAKING_TOKEN));
     }
 }

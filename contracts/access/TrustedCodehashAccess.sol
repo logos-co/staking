@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: MIT
-pragma solidity ^0.8.18;
+pragma solidity ^0.8.26;
 
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
-import { ITrustedCodehashAccess } from "./ITrustedCodehashAccess.sol";
+import { ITrustedCodehashAccess } from "../interfaces/ITrustedCodehashAccess.sol";
 
 /**
  * @title TrustedCodehashAccess

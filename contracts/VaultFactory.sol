@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MIT
 
-pragma solidity ^0.8.18;
+pragma solidity ^0.8.26;
 
 import { Ownable2Step } from "@openzeppelin/contracts/access/Ownable2Step.sol";
 import { StakeManager } from "./StakeManager.sol";
@@ -57,7 +57,7 @@ contract VaultFactory is Ownable2Step {
     /// @dev Anyone can call this function.
     /// @dev Emits a {VaultCreated} event.
     function createVault() external returns (StakeVault) {
-        StakeVault vault = new StakeVault(msg.sender, stakeManager.rewardToken(), stakeManager);
+        StakeVault vault = new StakeVault(msg.sender, stakeManager.REWARD_TOKEN(), stakeManager);
         emit VaultCreated(address(vault), msg.sender);
         return vault;
     }
