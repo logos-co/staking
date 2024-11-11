@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: MIT
 
-pragma solidity ^0.8.26;
+pragma solidity ^0.8.27;
 
 import { Ownable } from "@openzeppelin/contracts/access/Ownable.sol";
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
-import { IStakeManager } from "./IStakeManager.sol";
+import { IStakeManager } from "./interfaces/IStakeManager.sol";
 import { StakeManager } from "./StakeManager.sol";
 
 /**
@@ -54,7 +54,7 @@ contract StakeVault is Ownable {
     }
 
     function leave() external onlyOwner {
-        if (StakeManager(stakeManager).leave()) {
+        if (StakeManager(address(stakeManager)).leave()) {
             STAKING_TOKEN.transferFrom(address(this), msg.sender, STAKING_TOKEN.balanceOf(address(this)));
         }
     }
@@ -63,7 +63,7 @@ contract StakeVault is Ownable {
      * @notice Opt-in migration to a new IStakeManager contract.
      */
     function acceptMigration() external onlyOwner {
-        IStakeManager migrated = StakeManager(stakeManager).acceptUpdate();
+        IStakeManager migrated = StakeManager(address(stakeManager)).acceptUpdate();
         if (address(migrated) == address(0)) revert StakeVault__MigrationNotAvailable();
         stakeManager = migrated;
     }

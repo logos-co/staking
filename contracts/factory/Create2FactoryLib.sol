@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: CC0-1.0
 
-pragma solidity ^0.8.26;
+pragma solidity ^0.8.27;
 
 /**
  * @title Singleton Factory (EIP-2470)
@@ -19,10 +19,6 @@ library AddressLib {
         if (createdContract == address(0)) {
             revert ERC2470__CREATE2Failed();
         }
-    }
-
-    function computeAddress(bytes memory, bytes32 _salt) public view returns (address payable) {
-        return payable(hashToAddress(abi.encodePacked(bytes1(0xff), address(this), _salt, _initCode)));
     }
 
     function computeAddress(address _deployer, bytes32 _salt, bytes memory _initCode) public pure returns (address) {

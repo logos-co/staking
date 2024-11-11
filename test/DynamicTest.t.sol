@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: CC0-1.0
-pragma solidity ^0.8.26;
+pragma solidity ^0.8.27;
 
 import { ERC20 } from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
@@ -8,11 +8,11 @@ import { Deploy } from "../script/Deploy.s.sol";
 import { DeployMigrationStakeManager } from "../script/DeployMigrationStakeManager.s.sol";
 import { DeploymentConfig } from "../script/DeploymentConfig.s.sol";
 import { TrustedCodehashAccess, StakeManager, ExpiredStakeStorage } from "../contracts/StakeManager.sol";
-import { MultiplierPointMath } from "../contracts/MultiplierPointMath.sol";
+import { StakeMath } from "../contracts/StakeMath.sol";
 import { StakeVault } from "../contracts/StakeVault.sol";
 import { VaultFactory } from "../contracts/VaultFactory.sol";
 
-contract DynamicTest is MultiplierPointMath, Test {
+contract DynamicTest is StakeMath, Test {
     DeploymentConfig internal deploymentConfig;
     StakeManager internal stakeManager;
     VaultFactory internal vaultFactory;
@@ -35,7 +35,7 @@ contract DynamicTest is MultiplierPointMath, Test {
     }
 
     modifier fuzz_stake(uint256 _amount) {
-        vm.assume(_amount > _calculateMinimumStake(stakeManager.EPOCH_SIZE()));
+        vm.assume(_amount > stakeManager.MIN_BALANCE());
         vm.assume(_amount < 1e20);
         _;
     }
