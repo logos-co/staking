@@ -1,12 +1,14 @@
 // SPDX-License-Identifier: MIT-1.0
-pragma solidity ^0.8.26;
+pragma solidity ^0.8.27;
 
 import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 import { MultiplierPointMath } from "./MultiplierPointMath.sol";
 
 abstract contract StakeMath is MultiplierPointMath {
     /// @notice Minimal lockup time
-    uint256 public constant MIN_LOCKUP_TIME = 1 weeks;
+    uint256 public constant MIN_LOCKUP_PERIOD = 1 weeks;
+    /// @notice Maximum lockup period
+    uint256 public constant MAX_LOCKUP_PERIOD = MAX_MULTIPLIER * YEAR;
 
     /**
      * @notice Calculates the bonus multiplier points earned when a balance Δa is increased an optionally locked for a
@@ -29,7 +31,7 @@ abstract contract StakeMath is MultiplierPointMath {
         uint256 _increasedAmount,
         uint256 _increasedLockSeconds
     )
-        public
+        internal
         pure
         returns (uint256 _deltaMpTotal, uint256 _newMaxMP, uint256 _newLockEnd)
     {
@@ -37,7 +39,7 @@ abstract contract StakeMath is MultiplierPointMath {
         require(newBalance >= MIN_BALANCE, "StakeMath: balance too low");
         _newLockEnd = Math.max(_lockEndTime, _processTime) + _increasedLockSeconds;
         uint256 dt_lock = _newLockEnd - _processTime;
-        require(dt_lock == 0 || dt_lock >= MIN_LOCKUP_TIME, "StakeMath: lockup time too low");
+        require(dt_lock == 0 || dt_lock >= MIN_LOCKUP_PERIOD, "StakeMath: lockup time too low");
         require(dt_lock <= MAX_LOCKUP_PERIOD, "StakeMath: lockup time too high");
 
         uint256 deltaMpBonus;
@@ -52,9 +54,7 @@ abstract contract StakeMath is MultiplierPointMath {
         _deltaMpTotal = _calculateInitialMP(_increasedAmount) + deltaMpBonus;
         _newMaxMP = _maxMP + _deltaMpTotal + _calculateAccuredMP(_balance, MAX_MULTIPLIER * YEAR);
 
-        require(
-            _newMaxMP <= MAX_MULTIPLIER_ABSOLUTE * (_balance + _increasedAmount), "StakeMath: max multiplier exceeded"
-        );
+        require(_newMaxMP <= MP_MPY_ABSOLUTE * (_balance + _increasedAmount), "StakeMath: max multiplier exceeded");
     }
 
     /**
@@ -75,7 +75,7 @@ abstract contract StakeMath is MultiplierPointMath {
         uint256 _processTime,
         uint256 _increasedLockSeconds
     )
-        public
+        internal
         pure
         returns (uint256 _deltaMpTotal, uint256 _newMaxMP, uint256 _newLockEnd)
     {
@@ -84,13 +84,13 @@ abstract contract StakeMath is MultiplierPointMath {
 
         _newLockEnd = Math.max(_lockEndTime, _processTime) + _increasedLockSeconds;
         uint256 dt_lock = _newLockEnd - _processTime;
-        require(dt_lock == 0 || dt_lock >= MIN_LOCKUP_TIME, "StakeMath: lockup time too low");
+        require(dt_lock == 0 || dt_lock >= MIN_LOCKUP_PERIOD, "StakeMath: lockup time too low");
         require(dt_lock <= MAX_LOCKUP_PERIOD, "StakeMath: lockup time too high");
 
         _deltaMpTotal += _calculateBonusMP(_balance, _increasedLockSeconds);
         _newMaxMP = _maxMP + _deltaMpTotal;
 
-        require(_newMaxMP <= MAX_MULTIPLIER_ABSOLUTE * (_balance), "StakeMath: max multiplier exceeded");
+        require(_newMaxMP <= MP_MPY_ABSOLUTE * (_balance), "StakeMath: max multiplier exceeded");
     }
 
     /**
@@ -112,7 +112,7 @@ abstract contract StakeMath is MultiplierPointMath {
         uint256 _maxMP,
         uint256 _reducedAmount
     )
-        public
+        internal
         pure
         returns (uint256 _deltaMpTotal, uint256 _deltaMpMax)
     {
@@ -140,7 +140,7 @@ abstract contract StakeMath is MultiplierPointMath {
         uint256 _lastAccrualTime,
         uint256 _processTime
     )
-        public
+        internal
         pure
         returns (uint256 _deltaMpTotal)
     {
@@ -149,5 +149,16 @@ abstract contract StakeMath is MultiplierPointMath {
         if (_totalMP <= _maxMP) {
             _deltaMpTotal = Math.min(_calculateAccuredMP(_balance, dt), _maxMP - _totalMP);
         }
+    }
+
+    /**
+     * @dev Caution: This value is estimated and can be incorrect due precision loss.
+     * @notice Estimates the time an account set as locked time.
+     * @param _mpMax Maximum multiplier points calculated from the current balance.
+     * @param _currentBalance Current balance used to calculate the maximum multiplier points.
+     */
+    function _estimateLockTime(uint256 _mpMax, uint256 _currentBalance) internal pure returns (uint256 _lockTime) {
+        return Math.mulDiv((_mpMax - _currentBalance) * 100, YEAR, _currentBalance * MP_APY, Math.Rounding.Up)
+            - MAX_LOCKUP_PERIOD;
     }
 }

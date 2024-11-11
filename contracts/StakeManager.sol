@@ -1,17 +1,18 @@
 // SPDX-License-Identifier: MIT
 
-pragma solidity ^0.8.18;
+pragma solidity ^0.8.27;
 
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 
 import { TrustedCodehashAccess } from "./access/TrustedCodehashAccess.sol";
 import { ExpiredStakeStorage } from "./storage/ExpiredStakeStorage.sol";
-import { IStakeManager } from "./IStakeManager.sol";
+import { IStakeManager } from "./interfaces/IStakeManager.sol";
 import { MultiplierPointMath } from "./MultiplierPointMath.sol";
+import { StakeMath } from "./StakeMath.sol";
 import { StakeVault } from "./StakeVault.sol";
 
-contract StakeManager is IStakeManager, MultiplierPointMath, TrustedCodehashAccess {
+contract StakeManager is StakeMath, TrustedCodehashAccess, IStakeManager {
     error StakeManager__NoPendingMigration();
     error StakeManager__PendingMigration();
     error StakeManager__SenderIsNotPreviousStakeManager();
@@ -38,10 +39,6 @@ contract StakeManager is IStakeManager, MultiplierPointMath, TrustedCodehashAcce
         uint256 potentialMP;
     }
 
-    uint256 public constant EPOCH_SIZE = 1 weeks;
-    uint256 public constant MIN_LOCKUP_PERIOD = 2 weeks;
-    uint256 public constant MAX_LOCKUP_PERIOD = 4 * YEAR; // 4 years
-
     mapping(address index => Account value) public accounts;
     mapping(uint256 index => Epoch value) public epochs;
 
@@ -60,7 +57,8 @@ contract StakeManager is IStakeManager, MultiplierPointMath, TrustedCodehashAcce
 
     StakeManager public migration;
     StakeManager public immutable previousManager;
-    IERC20 public immutable rewardToken;
+    IERC20 public immutable REWARD_TOKEN;
+    IERC20 public immutable STAKING_TOKEN;
 
     modifier onlyAccountInitialized(address account) {
         if (accounts[account].lockUntil == 0) {
@@ -131,7 +129,8 @@ contract StakeManager is IStakeManager, MultiplierPointMath, TrustedCodehashAcce
     constructor(address _REWARD_TOKEN, address _previousManager) {
         startTime = (_previousManager == address(0)) ? block.timestamp : StakeManager(_previousManager).startTime();
         previousManager = StakeManager(_previousManager);
-        rewardToken = IERC20(_REWARD_TOKEN);
+        REWARD_TOKEN = IERC20(_REWARD_TOKEN);
+        STAKING_TOKEN = IERC20(_REWARD_TOKEN);
         if (address(previousManager) != address(0)) {
             expiredStakeStorage = previousManager.expiredStakeStorage();
         } else {
@@ -158,7 +157,7 @@ contract StakeManager is IStakeManager, MultiplierPointMath, TrustedCodehashAcce
         }
 
         //mp estimation
-        uint256 mpPerEpoch = _calculateAccuredMP(_amount, EPOCH_SIZE);
+        uint256 mpPerEpoch = _calculateAccuredMP(_amount, ACCURE_RATE);
         if (mpPerEpoch < 1) {
             revert StakeManager__StakeIsTooLow();
         }
@@ -167,7 +166,7 @@ contract StakeManager is IStakeManager, MultiplierPointMath, TrustedCodehashAcce
         uint256 epochAmountToReachMpLimit = (maxMpToMint) / mpPerEpoch;
         uint256 mpLimitEpoch = currentEpoch + epochAmountToReachMpLimit;
         uint256 lastEpochAmountToMint = ((mpPerEpoch * (epochAmountToReachMpLimit + 1)) - maxMpToMint);
-        uint256 bonusMP = _calculateBonusMP(_amount, _seconds);
+        uint256 bonusMP = _calculateInitialMP(_amount) + _calculateBonusMP(_amount, _seconds);
 
         // account initialization
         accounts[msg.sender] = Account({
@@ -212,7 +211,7 @@ contract StakeManager is IStakeManager, MultiplierPointMath, TrustedCodehashAcce
         uint256 reducedMP = Math.mulDiv(_amount, account.totalMP, account.balance);
         uint256 reducedInitialMP = Math.mulDiv(_amount, account.bonusMP, account.balance);
 
-        uint256 mpPerEpoch = _calculateAccuredMP(account.balance, EPOCH_SIZE);
+        uint256 mpPerEpoch = _calculateAccuredMP(account.balance, ACCURE_RATE);
         expiredStakeStorage.decrementExpiredMP(account.mpLimitEpoch, mpPerEpoch);
         if (account.mpLimitEpoch < currentEpoch) {
             totalMPPerEpoch -= mpPerEpoch;
@@ -322,7 +321,7 @@ contract StakeManager is IStakeManager, MultiplierPointMath, TrustedCodehashAcce
             revert StakeManager__InvalidMigration();
         }
         migration = _migration;
-        rewardToken.transfer(address(migration), epochReward());
+        REWARD_TOKEN.transfer(address(migration), epochReward());
         expiredStakeStorage.transferOwnership(address(_migration));
         migration.migrationInitialize(
             currentEpoch, totalMP, totalStaked, startTime, totalMPPerEpoch, potentialMP, currentEpochTotalExpiredMP
@@ -368,7 +367,7 @@ contract StakeManager is IStakeManager, MultiplierPointMath, TrustedCodehashAcce
      * @notice Transfer current epoch funds for migrated manager
      */
     function transferNonPending() external onlyPendingMigration {
-        rewardToken.transfer(address(migration), epochReward());
+        REWARD_TOKEN.transfer(address(migration), epochReward());
     }
 
     /**
@@ -448,7 +447,7 @@ contract StakeManager is IStakeManager, MultiplierPointMath, TrustedCodehashAcce
         while (userEpoch < _limitEpoch) {
             Epoch storage iEpoch = epochs[userEpoch];
             //mint multiplier points to that epoch
-            _mintMP(account, startTime + (EPOCH_SIZE * (userEpoch + 1)), iEpoch);
+            _mintMP(account, startTime + (ACCURE_RATE * (userEpoch + 1)), iEpoch);
             uint256 userSupply = account.balance + account.totalMP;
             uint256 userEpochReward = Math.mulDiv(userSupply, iEpoch.epochReward, iEpoch.totalSupply);
             userReward += userEpochReward;
@@ -463,7 +462,7 @@ contract StakeManager is IStakeManager, MultiplierPointMath, TrustedCodehashAcce
         account.epoch = userEpoch;
         if (userReward > 0) {
             pendingReward -= userReward;
-            rewardToken.transfer(account.rewardAddress, userReward);
+            REWARD_TOKEN.transfer(account.rewardAddress, userReward);
         }
         if (address(migration) != address(0)) {
             mpDifference = account.totalMP - mpDifference;
@@ -565,7 +564,7 @@ contract StakeManager is IStakeManager, MultiplierPointMath, TrustedCodehashAcce
      * @return _epochReward current epoch reward
      */
     function epochReward() public view returns (uint256 _epochReward) {
-        return rewardToken.balanceOf(address(this)) - pendingReward;
+        return REWARD_TOKEN.balanceOf(address(this)) - pendingReward;
     }
 
     /**
@@ -573,7 +572,7 @@ contract StakeManager is IStakeManager, MultiplierPointMath, TrustedCodehashAcce
      * @return _epochEnd end time of current epoch
      */
     function epochEnd() public view returns (uint256 _epochEnd) {
-        return startTime + (EPOCH_SIZE * (currentEpoch + 1));
+        return startTime + (ACCURE_RATE * (currentEpoch + 1));
     }
 
     /**
@@ -581,6 +580,6 @@ contract StakeManager is IStakeManager, MultiplierPointMath, TrustedCodehashAcce
      * @return _newEpoch the number of the epoch after all epochs that can be processed
      */
     function newEpoch() public view returns (uint256 _newEpoch) {
-        _newEpoch = (block.timestamp - startTime) / EPOCH_SIZE;
+        _newEpoch = (block.timestamp - startTime) / ACCURE_RATE;
     }
 }
