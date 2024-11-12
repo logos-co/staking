@@ -25,7 +25,7 @@ contract StakeManager is StakeMath, TrustedCodehashAccess, IStakeManager {
     struct Account {
         address rewardAddress;
         uint256 balance;
-        uint256 bonusMP;
+        uint256 maxMP;
         uint256 totalMP;
         uint256 lastMint;
         uint256 lockUntil;
@@ -167,12 +167,13 @@ contract StakeManager is StakeMath, TrustedCodehashAccess, IStakeManager {
         uint256 mpLimitEpoch = currentEpoch + epochAmountToReachMpLimit;
         uint256 lastEpochAmountToMint = ((mpPerEpoch * (epochAmountToReachMpLimit + 1)) - maxMpToMint);
         uint256 bonusMP = _calculateInitialMP(_amount) + _calculateBonusMP(_amount, _seconds);
+        uint256 maxMP = _calculateMaxMP(_amount, _seconds);
 
         // account initialization
         accounts[msg.sender] = Account({
             rewardAddress: StakeVault(msg.sender).owner(),
             balance: _amount,
-            bonusMP: bonusMP,
+            maxMP: maxMP,
             totalMP: bonusMP,
             lastMint: block.timestamp,
             lockUntil: block.timestamp + _seconds,
@@ -208,8 +209,8 @@ contract StakeManager is StakeMath, TrustedCodehashAccess, IStakeManager {
         }
         _processAccount(account, currentEpoch);
 
-        uint256 reducedMP = Math.mulDiv(_amount, account.totalMP, account.balance);
-        uint256 reducedInitialMP = Math.mulDiv(_amount, account.bonusMP, account.balance);
+        uint256 reducedTotalMP = Math.mulDiv(_amount, account.totalMP, account.balance);
+        uint256 reducedMaxMP = Math.mulDiv(_amount, account.maxMP, account.balance);
 
         uint256 mpPerEpoch = _calculateAccuredMP(account.balance, ACCURE_RATE);
         expiredStakeStorage.decrementExpiredMP(account.mpLimitEpoch, mpPerEpoch);
@@ -219,10 +220,10 @@ contract StakeManager is StakeMath, TrustedCodehashAccess, IStakeManager {
 
         //update storage
         account.balance -= _amount;
-        account.bonusMP -= reducedInitialMP;
-        account.totalMP -= reducedMP;
+        account.maxMP -= reducedMaxMP;
+        account.totalMP -= reducedTotalMP;
         totalStaked -= _amount;
-        totalMP -= reducedMP;
+        totalMP -= reducedTotalMP;
     }
 
     /**
@@ -261,7 +262,7 @@ contract StakeManager is StakeMath, TrustedCodehashAccess, IStakeManager {
 
         //update account storage
         account.lockUntil = lockUntil;
-        account.bonusMP += bonusMP;
+        account.maxMP += bonusMP;
         account.totalMP += bonusMP;
         //update global storage
         totalMP += bonusMP;
@@ -477,50 +478,18 @@ contract StakeManager is StakeMath, TrustedCodehashAccess, IStakeManager {
      * @param epoch Epoch to increment total supply
      */
     function _mintMP(Account storage account, uint256 processTime, Epoch storage epoch) private {
-        uint256 mpToMint = _getMaxMPToMint(
-            _calculateAccuredMP(account.balance, processTime - account.lastMint),
-            account.balance,
-            account.bonusMP,
-            account.totalMP
-        );
-
+        uint256 accruedMP = _calculateAccuredMP(account.balance, processTime - account.lastMint);
+        if (accruedMP + account.totalMP > account.maxMP) {
+            accruedMP = account.maxMP - account.totalMP; //how much left to reach cap
+        }
         //update storage
         account.lastMint = processTime;
-        account.totalMP += mpToMint;
-        totalMP += mpToMint;
+        account.totalMP += accruedMP;
+        totalMP += accruedMP;
 
         //mp estimation
-        epoch.potentialMP -= mpToMint;
-        potentialMP -= mpToMint;
-    }
-
-    /**
-     * @notice Calculates maximum multiplier point increase for given balance
-     * @param _mpToMint tested value
-     * @param _balance balance of account
-     * @param _totalMP total multiplier point of the account
-     * @param _bonusMP bonus multiplier point of the account
-     * @return _maxMpToMint maximum multiplier points to mint
-     */
-    function _getMaxMPToMint(
-        uint256 _mpToMint,
-        uint256 _balance,
-        uint256 _bonusMP,
-        uint256 _totalMP
-    )
-        private
-        pure
-        returns (uint256 _maxMpToMint)
-    {
-        // Maximum multiplier point for given balance
-        _maxMpToMint = _calculateMaxAccuredMP(_balance) + _bonusMP;
-        if (_mpToMint + _totalMP > _maxMpToMint) {
-            //reached cap when increasing MP
-            return _maxMpToMint - _totalMP; //how much left to reach cap
-        } else {
-            //not reached capw hen increasing MP
-            return _mpToMint; //just return tested value
-        }
+        epoch.potentialMP -= accruedMP;
+        potentialMP -= accruedMP;
     }
 
     /**
