@@ -218,46 +218,46 @@ contract UnstakeTest is StakeManagerTest {
 
     function test_UnstakeShouldReturnFund_NoLockUp() public {
         uint256 lockTime = 0;
-        uint256 stakeAmount = 100;
+        uint256 stakeAmount = 100 * MIN_BALANCE;
         uint256 mintAmount = stakeAmount * 10;
         StakeVault userVault = _createStakingAccount(testUser, stakeAmount, lockTime, mintAmount);
-        assertEq(ERC20(stakeToken).balanceOf(testUser), 900);
+        assertEq(ERC20(stakeToken).balanceOf(testUser), mintAmount - stakeAmount);
 
         vm.prank(testUser);
-        userVault.unstake(100);
+        userVault.unstake(stakeAmount);
 
         assertEq(stakeManager.totalStaked(), 0);
         assertEq(ERC20(stakeToken).balanceOf(address(userVault)), 0);
-        assertEq(ERC20(stakeToken).balanceOf(testUser), 1000);
+        assertEq(ERC20(stakeToken).balanceOf(testUser), mintAmount);
     }
 
     function test_UnstakeShouldReturnFund_WithLockUp() public {
         uint256 lockTime = stakeManager.MIN_LOCKUP_PERIOD();
-        uint256 stakeAmount = 100;
+        uint256 stakeAmount = 100 * MIN_BALANCE;
         uint256 mintAmount = stakeAmount * 10;
         StakeVault userVault = _createStakingAccount(testUser, stakeAmount, lockTime, mintAmount);
-        assertEq(ERC20(stakeToken).balanceOf(testUser), 900);
+        assertEq(ERC20(stakeToken).balanceOf(testUser), mintAmount - stakeAmount);
 
         vm.warp(block.timestamp + lockTime + 1);
 
         vm.prank(testUser);
-        userVault.unstake(100);
+        userVault.unstake(stakeAmount);
 
         assertEq(stakeManager.totalStaked(), 0);
         assertEq(ERC20(stakeToken).balanceOf(address(userVault)), 0);
-        assertEq(ERC20(stakeToken).balanceOf(testUser), 1000);
+        assertEq(ERC20(stakeToken).balanceOf(testUser), mintAmount);
     }
 
     function test_UnstakeShouldBurnMultiplierPoints() public {
         uint256 percentToBurn = 90;
-        uint256 stakeAmount = 100;
+        uint256 stakeAmount = 100 * MIN_BALANCE;
         StakeVault userVault = _createStakingAccount(testUser, stakeAmount);
 
         vm.startPrank(testUser);
 
         assertEq(stakeManager.totalMP(), stakeAmount);
         for (uint256 i = 0; i < 53; i++) {
-            vm.warp(stakeManager.epochEnd());
+            vm.warp(stakeManager.getEpochStartTime(stakeManager.currentEpoch() + 1));
             stakeManager.executeAccount(address(userVault), i + 1);
         }
         (, uint256 balanceBefore, uint256 maxMPBefore, uint256 totalMPBefore,,,,) =
@@ -470,7 +470,7 @@ contract ExecuteAccountTest is StakeManagerTest {
         vm.expectRevert(StakeManager.StakeManager__InvalidLimitEpoch.selector);
         stakeManager.executeAccount(address(userVault), currentEpoch + 1);
 
-        vm.warp(stakeManager.epochEnd() - 1);
+        vm.warp(stakeManager.getEpochStartTime(stakeManager.currentEpoch() + 1) - 1);
 
         vm.expectRevert(StakeManager.StakeManager__InvalidLimitEpoch.selector);
         stakeManager.executeEpoch(currentEpoch + 1);
@@ -478,7 +478,7 @@ contract ExecuteAccountTest is StakeManagerTest {
         vm.expectRevert(StakeManager.StakeManager__InvalidLimitEpoch.selector);
         stakeManager.executeAccount(address(userVault), currentEpoch + 1);
 
-        vm.warp(stakeManager.epochEnd());
+        vm.warp(stakeManager.getEpochStartTime(stakeManager.currentEpoch() + 1));
 
         stakeManager.executeAccount(address(userVault), currentEpoch + 1);
         stakeManager.executeEpoch(currentEpoch + 1);
@@ -491,7 +491,7 @@ contract ExecuteAccountTest is StakeManagerTest {
         vm.expectRevert(StakeManager.StakeManager__InvalidLimitEpoch.selector);
         stakeManager.executeAccount(address(userVault), currentEpoch + 1);
 
-        vm.warp(stakeManager.epochEnd() + stakeManager.ACCURE_RATE() - 1);
+        vm.warp(stakeManager.getEpochStartTime(stakeManager.currentEpoch() + 1) + stakeManager.ACCURE_RATE() - 1);
 
         vm.expectRevert(StakeManager.StakeManager__InvalidLimitEpoch.selector);
         stakeManager.executeEpoch(currentEpoch + 2);
@@ -518,9 +518,9 @@ contract ExecuteAccountTest is StakeManagerTest {
         userVaults.push(_createStakingAccount(makeAddr("testUser"), stakeAmount, 0));
 
         (,,, uint256 totalMP, uint256 lastMint,, uint256 epoch,) = stakeManager.accounts(address(userVaults[0]));
-        vm.warp(stakeManager.epochEnd());
+        vm.warp(stakeManager.getEpochStartTime(stakeManager.currentEpoch() + 1));
         stakeManager.executeEpoch();
-        vm.warp(stakeManager.epochEnd());
+        vm.warp(stakeManager.getEpochStartTime(stakeManager.currentEpoch() + 1));
 
         //expected MP is, the starting totalMP + the calculatedMPToMint of user balance for one ACCURE_RATE multiplied
         // by
@@ -546,7 +546,7 @@ contract ExecuteAccountTest is StakeManagerTest {
 
         for (uint256 i = 0; i < 3; i++) {
             deal(stakeToken, address(stakeManager), 100 ether);
-            vm.warp(stakeManager.epochEnd());
+            vm.warp(stakeManager.getEpochStartTime(stakeManager.currentEpoch() + 1));
             console.log("######### NOW", block.timestamp);
             stakeManager.executeEpoch();
             console.log("##### NEW EPOCH", stakeManager.currentEpoch());
@@ -598,30 +598,36 @@ contract ExecuteAccountTest is StakeManagerTest {
 
         userVaults.push(_createStakingAccount(makeAddr("testUser"), stakeAmount, 0));
 
-        vm.warp(stakeManager.epochEnd() - (stakeManager.ACCURE_RATE() - 1));
+        vm.warp(stakeManager.getEpochStartTime(stakeManager.currentEpoch() + 1) - (stakeManager.ACCURE_RATE() - 1));
         userVaults.push(_createStakingAccount(makeAddr("testUser2"), stakeAmount, 0));
 
-        vm.warp(stakeManager.epochEnd() - (stakeManager.ACCURE_RATE() - 2));
+        vm.warp(stakeManager.getEpochStartTime(stakeManager.currentEpoch() + 1) - (stakeManager.ACCURE_RATE() - 2));
         userVaults.push(_createStakingAccount(makeAddr("testUser3"), stakeAmount, 0));
 
-        vm.warp(stakeManager.epochEnd() - ((stakeManager.ACCURE_RATE() / 4) * 3));
+        vm.warp(
+            stakeManager.getEpochStartTime(stakeManager.currentEpoch() + 1) - ((stakeManager.ACCURE_RATE() / 4) * 3)
+        );
         userVaults.push(_createStakingAccount(makeAddr("testUser4"), stakeAmount, 0));
 
-        vm.warp(stakeManager.epochEnd() - ((stakeManager.ACCURE_RATE() / 4) * 2));
+        vm.warp(
+            stakeManager.getEpochStartTime(stakeManager.currentEpoch() + 1) - ((stakeManager.ACCURE_RATE() / 4) * 2)
+        );
         userVaults.push(_createStakingAccount(makeAddr("testUser5"), stakeAmount, 0));
 
-        vm.warp(stakeManager.epochEnd() - ((stakeManager.ACCURE_RATE() / 4) * 1));
+        vm.warp(
+            stakeManager.getEpochStartTime(stakeManager.currentEpoch() + 1) - ((stakeManager.ACCURE_RATE() / 4) * 1)
+        );
         userVaults.push(_createStakingAccount(makeAddr("testUser6"), stakeAmount, 0));
 
-        vm.warp(stakeManager.epochEnd() - 2);
+        vm.warp(stakeManager.getEpochStartTime(stakeManager.currentEpoch() + 1) - 2);
         userVaults.push(_createStakingAccount(makeAddr("testUser7"), stakeAmount, 0));
 
-        vm.warp(stakeManager.epochEnd() - 1);
+        vm.warp(stakeManager.getEpochStartTime(stakeManager.currentEpoch() + 1) - 1);
         userVaults.push(_createStakingAccount(makeAddr("testUser8"), stakeAmount, 0));
 
         for (uint256 i = 0; i <= epochsAmountToReachCap; i++) {
             deal(stakeToken, address(stakeManager), 100 ether);
-            vm.warp(stakeManager.epochEnd());
+            vm.warp(stakeManager.getEpochStartTime(stakeManager.currentEpoch() + 1));
             stakeManager.executeEpoch();
             for (uint256 j = 0; j < userVaults.length; j++) {
                 (address rewardAddress,,, uint256 totalMPBefore, uint256 lastMintBefore,, uint256 epochBefore,) =
@@ -643,7 +649,7 @@ contract ExecuteAccountTest is StakeManagerTest {
 
         for (uint256 i = 0; i < 100; i++) {
             deal(stakeToken, address(stakeManager), 100 ether);
-            vm.warp(stakeManager.epochEnd());
+            vm.warp(stakeManager.getEpochStartTime(stakeManager.currentEpoch() + 1));
             stakeManager.executeEpoch();
             for (uint256 j = 0; j < userVaults.length; j++) {
                 (address rewardAddress,,, uint256 totalMPBefore, uint256 lastMintBefore,, uint256 epochBefore,) =
@@ -744,7 +750,7 @@ contract UserFlowsTest is StakeManagerTest {
 
         //tests up to epochs to reach MAX_MULTIPLIER + 10 epochs
         for (uint256 i = 0; i < epochsAmountToReachCap + 10; i++) {
-            vm.warp(stakeManager.epochEnd());
+            vm.warp(stakeManager.getEpochStartTime(stakeManager.currentEpoch() + 1));
             stakeManager.executeEpoch();
             uint256 pendingMPToBeMintedBefore = stakeManager.potentialMP();
             uint256 totalMP = stakeManager.totalMP();
@@ -790,7 +796,7 @@ contract MigrationStakeManagerTest is StakeManagerTest {
         stakeManager.startMigration(newStakeManager);
         assertEq(address(stakeManager.migration()), address(newStakeManager));
 
-        vm.warp(stakeManager.epochEnd());
+        vm.warp(stakeManager.getEpochStartTime(stakeManager.currentEpoch() + 1));
         vm.expectRevert(StakeManager.StakeManager__PendingMigration.selector);
         stakeManager.executeEpoch();
         assertEq(stakeManager.currentEpoch(), 0);
@@ -799,7 +805,7 @@ contract MigrationStakeManagerTest is StakeManagerTest {
 
 contract ExecuteEpochTest is MigrationStakeManagerTest {
     function test_ExecuteEpochNewEpoch() public {
-        uint256 firstEpochEnd = stakeManager.epochEnd();
+        uint256 firstEpochEnd = stakeManager.getEpochStartTime(stakeManager.currentEpoch() + 1);
         assertEq(stakeManager.currentEpoch(), 0, "Epoch not 0 at start of test");
         assertEq(stakeManager.newEpoch(), 0, "New epoch not 0 at start of test");
         stakeManager.executeEpoch();
@@ -829,15 +835,15 @@ contract ExecuteEpochTest is MigrationStakeManagerTest {
     function test_ExecuteEpochExecuteEpochAfterEnd() public {
         StakeVault userVault = _createStakingAccount(makeAddr("testUser"), 100_000, 0);
 
-        vm.warp(stakeManager.epochEnd() + (stakeManager.ACCURE_RATE() / 2));
+        vm.warp(stakeManager.getEpochStartTime(stakeManager.currentEpoch() + 1) + (stakeManager.ACCURE_RATE() / 2));
         stakeManager.executeEpoch();
         stakeManager.executeAccount(address(userVault), stakeManager.currentEpoch());
-        vm.warp(stakeManager.epochEnd());
+        vm.warp(stakeManager.getEpochStartTime(stakeManager.currentEpoch() + 1));
 
         stakeManager.executeEpoch();
         stakeManager.executeAccount(address(userVault), stakeManager.currentEpoch());
 
-        vm.warp(stakeManager.epochEnd() + (stakeManager.ACCURE_RATE() * 2));
+        vm.warp(stakeManager.getEpochStartTime(stakeManager.currentEpoch() + 1) + (stakeManager.ACCURE_RATE() * 2));
         stakeManager.executeEpoch();
         stakeManager.executeAccount(address(userVault), stakeManager.currentEpoch());
     }
@@ -846,7 +852,7 @@ contract ExecuteEpochTest is MigrationStakeManagerTest {
         StakeVault userVault = _createStakingAccount(makeAddr("testUser"), 100_000, 0);
 
         for (uint256 i = 0; i < 10; i++) {
-            vm.warp(stakeManager.epochEnd());
+            vm.warp(stakeManager.getEpochStartTime(stakeManager.currentEpoch() + 1));
             stakeManager.executeEpoch();
         }
         stakeManager.executeAccount(address(userVault), stakeManager.currentEpoch());
@@ -856,7 +862,7 @@ contract ExecuteEpochTest is MigrationStakeManagerTest {
         StakeVault userVault = _createStakingAccount(makeAddr("testUser"), 100_000, 0);
 
         for (uint256 i = 0; i < 10; i++) {
-            vm.warp(stakeManager.epochEnd());
+            vm.warp(stakeManager.getEpochStartTime(stakeManager.currentEpoch() + 1));
         }
         stakeManager.executeEpoch();
         stakeManager.executeAccount(address(userVault), stakeManager.currentEpoch());
@@ -866,7 +872,7 @@ contract ExecuteEpochTest is MigrationStakeManagerTest {
         StakeVault userVault = _createStakingAccount(makeAddr("testUser"), 100_000, 0);
 
         for (uint256 i = 0; i < 10; i++) {
-            vm.warp(stakeManager.epochEnd());
+            vm.warp(stakeManager.getEpochStartTime(stakeManager.currentEpoch() + 1));
         }
         stakeManager.executeAccount(address(userVault));
     }
@@ -875,7 +881,9 @@ contract ExecuteEpochTest is MigrationStakeManagerTest {
         StakeVault userVault = _createStakingAccount(makeAddr("testUser"), 100_000, 0);
 
         for (uint256 i = 0; i < 10; i++) {
-            vm.warp(stakeManager.epochEnd() + (stakeManager.ACCURE_RATE() / 10 - i));
+            vm.warp(
+                stakeManager.getEpochStartTime(stakeManager.currentEpoch() + 1) + (stakeManager.ACCURE_RATE() / 10 - i)
+            );
             stakeManager.executeEpoch();
         }
         stakeManager.executeAccount(address(userVault), stakeManager.currentEpoch());
@@ -885,7 +893,9 @@ contract ExecuteEpochTest is MigrationStakeManagerTest {
         StakeVault userVault = _createStakingAccount(makeAddr("testUser"), 100_000, 0);
 
         for (uint256 i = 0; i < 10; i++) {
-            vm.warp(stakeManager.epochEnd() + (stakeManager.ACCURE_RATE() / 10 - i));
+            vm.warp(
+                stakeManager.getEpochStartTime(stakeManager.currentEpoch() + 1) + (stakeManager.ACCURE_RATE() / 10 - i)
+            );
         }
         stakeManager.executeEpoch();
         stakeManager.executeAccount(address(userVault), stakeManager.currentEpoch());
@@ -895,7 +905,9 @@ contract ExecuteEpochTest is MigrationStakeManagerTest {
         StakeVault userVault = _createStakingAccount(makeAddr("testUser"), 100_000, 0);
 
         for (uint256 i = 0; i < 10; i++) {
-            vm.warp(stakeManager.epochEnd() + (stakeManager.ACCURE_RATE() / 10 - i));
+            vm.warp(
+                stakeManager.getEpochStartTime(stakeManager.currentEpoch() + 1) + (stakeManager.ACCURE_RATE() / 10 - i)
+            );
         }
         stakeManager.executeAccount(address(userVault));
     }
@@ -903,13 +915,13 @@ contract ExecuteEpochTest is MigrationStakeManagerTest {
     function test_ExecuteEpochExecuteAccountAfterEpochEnd() public {
         StakeVault userVault = _createStakingAccount(makeAddr("testUser"), 100_000, 0);
 
-        vm.warp(stakeManager.epochEnd() + (stakeManager.ACCURE_RATE() / 2));
+        vm.warp(stakeManager.getEpochStartTime(stakeManager.currentEpoch() + 1) + (stakeManager.ACCURE_RATE() / 2));
         stakeManager.executeAccount(address(userVault), stakeManager.currentEpoch());
 
-        vm.warp(stakeManager.epochEnd());
+        vm.warp(stakeManager.getEpochStartTime(stakeManager.currentEpoch() + 1));
         stakeManager.executeAccount(address(userVault), stakeManager.currentEpoch());
 
-        vm.warp(stakeManager.epochEnd() + (stakeManager.ACCURE_RATE() * 2));
+        vm.warp(stakeManager.getEpochStartTime(stakeManager.currentEpoch() + 1) + (stakeManager.ACCURE_RATE() * 2));
         stakeManager.executeAccount(address(userVault), stakeManager.currentEpoch());
     }
 
@@ -917,7 +929,9 @@ contract ExecuteEpochTest is MigrationStakeManagerTest {
         StakeVault userVault = _createStakingAccount(makeAddr("testUser"), 100_000, 0);
 
         for (uint256 i = 0; i < 10; i++) {
-            vm.warp(stakeManager.epochEnd() + (stakeManager.ACCURE_RATE() / 10 - i));
+            vm.warp(
+                stakeManager.getEpochStartTime(stakeManager.currentEpoch() + 1) + (stakeManager.ACCURE_RATE() / 10 - i)
+            );
             stakeManager.executeAccount(address(userVault), stakeManager.currentEpoch());
         }
     }
@@ -925,7 +939,7 @@ contract ExecuteEpochTest is MigrationStakeManagerTest {
     function test_ExecuteEpochShouldNotIncreaseEpochBeforeEnd() public {
         assertEq(stakeManager.currentEpoch(), 0);
 
-        vm.warp(stakeManager.epochEnd() - 1);
+        vm.warp(stakeManager.getEpochStartTime(stakeManager.currentEpoch() + 1) - 1);
         stakeManager.executeEpoch();
         assertEq(stakeManager.currentEpoch(), 0);
     }
@@ -933,7 +947,7 @@ contract ExecuteEpochTest is MigrationStakeManagerTest {
     function test_ExecuteEpochShouldIncreaseEpoch() public {
         assertEq(stakeManager.currentEpoch(), 0);
 
-        vm.warp(stakeManager.epochEnd());
+        vm.warp(stakeManager.getEpochStartTime(stakeManager.currentEpoch() + 1));
         stakeManager.executeEpoch();
         assertEq(stakeManager.currentEpoch(), 1);
     }
@@ -945,7 +959,7 @@ contract ExecuteEpochTest is MigrationStakeManagerTest {
         deal(stakeToken, address(stakeManager), 1);
         assertEq(stakeManager.pendingReward(), 0);
         assertEq(stakeManager.epochReward(), 1);
-        vm.warp(stakeManager.epochEnd());
+        vm.warp(stakeManager.getEpochStartTime(stakeManager.currentEpoch() + 1));
         stakeManager.executeEpoch();
         assertEq(stakeManager.pendingReward(), 1);
         assertEq(stakeManager.epochReward(), 0);
