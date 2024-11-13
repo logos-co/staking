@@ -381,7 +381,7 @@ contract StakeManager is StakeMath, EpochMath, TrustedCodehashAccess, IStakeMana
         uint256 _totalMP,
         uint256 _totalStaked,
         uint256 _startTime,
-        uint256 _totalMPPerEpoch,
+        uint256 _totalMPRate,
         uint256 _potentialMP,
         uint256 _currentEpochExpiredMP
     )
@@ -398,7 +398,7 @@ contract StakeManager is StakeMath, EpochMath, TrustedCodehashAccess, IStakeMana
         currentEpoch = _currentEpoch;
         totalMP = _totalMP;
         totalStaked = _totalStaked;
-        totalMPRate = _totalMPPerEpoch;
+        totalMPRate = _totalMPRate;
         potentialMP = _potentialMP;
         currentEpochTotalExpiredMP = _currentEpochExpiredMP;
     }

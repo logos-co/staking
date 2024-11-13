@@ -5,13 +5,13 @@ methods {
 }
 
 invariant MPcantBeGreaterThanMaxMP(address addr)
-  to_mathint(getAccountCurrentMultiplierPoints(addr)) <= (getAccountBalance(addr) * 8) + getAccountBonusMultiplierPoints(addr)
+  to_mathint(getAccountCurrentMultiplierPoints(addr)) <= to_mathint(getAccountMaxMultiplierPoints(addr))
   filtered {
     f -> f.selector != sig:migrateFrom(address,bool,StakeManager.Account).selector
   }
   { preserved {
-      requireInvariant InitialMPIsNeverSmallerThanBalance(addr);
-      requireInvariant CurrentMPIsNeverSmallerThanInitialMP(addr);
+      requireInvariant MaxMPIsNeverSmallerThanBalance(addr);
+      requireInvariant CurrentMPIsNeverSmallerThanBalance(addr);
     }
   }
 

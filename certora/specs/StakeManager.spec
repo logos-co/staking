@@ -78,7 +78,7 @@ invariant sumOfMultipliersIsMultiplierSupply()
   }
   { preserved with (env e){
     requireInvariant accountMPIsZeroIfBalanceIsZero(e.msg.sender);
-    requireInvariant accountBonusMPIsZeroIfBalanceIsZero(e.msg.sender);
+    requireInvariant accountMaxMPIsZeroIfBalanceIsZero(e.msg.sender);
     }
   }
 
@@ -95,20 +95,8 @@ invariant highEpochsAreNull(uint256 epochNumber)
     m -> !requiresPreviousManager(m) && !requiresNextManager(m)
   }
 
-invariant accountBonusMPIsZeroIfBalanceIsZero(address addr)
-  to_mathint(getAccountBalance(addr)) == 0 => to_mathint(getAccountBonusMultiplierPoints(addr)) == 0
-  filtered {
-    f -> f.selector != sig:migrateFrom(address,bool,StakeManager.Account).selector
-  }
-
-invariant accountMPIsZeroIfBalanceIsZero(address addr)
-  to_mathint(getAccountBalance(addr)) == 0 => to_mathint(getAccountCurrentMultiplierPoints(addr)) == 0
-  filtered {
-    f -> f.selector != sig:migrateFrom(address,bool,StakeManager.Account).selector
-  }
-
-invariant InitialMPIsNeverSmallerThanBalance(address addr)
-  to_mathint(getAccountBonusMultiplierPoints(addr)) >= to_mathint(getAccountBalance(addr))
+invariant accountMaxMPIsZeroIfBalanceIsZero(address addr)
+  to_mathint(getAccountBalance(addr)) == 0 => to_mathint(getAccountMaxMultiplierPoints(addr)) == 0
   filtered {
     f -> f.selector != sig:migrateFrom(address,bool,StakeManager.Account).selector
   }
@@ -135,18 +123,18 @@ rule stakingMintsMultiplierPoints1To1Ratio {
   uint256 multiplierPointsBefore;
   uint256 multiplierPointsAfter;
 
-  requireInvariant InitialMPIsNeverSmallerThanBalance(e.msg.sender);
-  requireInvariant CurrentMPIsNeverSmallerThanInitialMP(e.msg.sender);
+  requireInvariant MaxMPIsNeverSmallerThanBalance(e.msg.sender);
+  requireInvariant CurrentMPIsNeverSmallerThanBalance(e.msg.sender);
   requireInvariant accountMPIsZeroIfBalanceIsZero(e.msg.sender);
 
   require getAccountLockUntil(e.msg.sender) <= e.block.timestamp;
 
-  multiplierPointsBefore = getAccountBonusMultiplierPoints(e.msg.sender);
+  multiplierPointsBefore = getAccountMaxMultiplierPoints(e.msg.sender);
   stake(e, amount, lockupTime);
-  multiplierPointsAfter = getAccountBonusMultiplierPoints(e.msg.sender);
-
-  assert lockupTime == 0 => to_mathint(multiplierPointsAfter) == multiplierPointsBefore + amount;
-  assert to_mathint(multiplierPointsAfter) >= multiplierPointsBefore + amount;
+  multiplierPointsAfter = getAccountMaxMultiplierPoints(e.msg.sender);
+//
+  assert lockupTime == 0 => to_mathint(multiplierPointsAfter) == amount * 5;
+  assert to_mathint(multiplierPointsAfter) == to_mathint(amount + ((amount * 100) * ((4 * 31556925) + lockupTime)) / (31556925 * 100));
 }
 
 rule stakingGreaterLockupTimeMeansGreaterMPs {
@@ -155,19 +143,19 @@ rule stakingGreaterLockupTimeMeansGreaterMPs {
   uint256 amount;
   uint256 lockupTime1;
   uint256 lockupTime2;
-  uint256 multiplierPointsAfter1;
-  uint256 multiplierPointsAfter2;
+  uint256 maxMPAfter1;
+  uint256 maxMPAfter2;
 
   storage initalStorage = lastStorage;
 
   stake(e, amount, lockupTime1);
-  multiplierPointsAfter1 = getAccountBonusMultiplierPoints(e.msg.sender);
+  maxMPAfter1 = getAccountMaxMultiplierPoints(e.msg.sender);
 
   stake(e, amount, lockupTime2) at initalStorage;
-  multiplierPointsAfter2 = getAccountBonusMultiplierPoints(e.msg.sender);
+  maxMPAfter2 = getAccountMaxMultiplierPoints(e.msg.sender);
 
-  assert lockupTime1 >= lockupTime2 => to_mathint(multiplierPointsAfter1) >= to_mathint(multiplierPointsAfter2);
-  satisfy to_mathint(multiplierPointsAfter1) > to_mathint(multiplierPointsAfter2);
+  assert lockupTime1 >= lockupTime2 => to_mathint(maxMPAfter1) >= to_mathint(maxMPAfter2);
+  satisfy to_mathint(maxMPAfter1) > to_mathint(maxMPAfter2);
 }
 
 /**
