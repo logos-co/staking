@@ -6,7 +6,7 @@ methods {
   function staked.balanceOf(address) external returns (uint256) envfree;
   function totalStaked() external returns (uint256) envfree;
   function totalMP() external returns (uint256) envfree;
-  function totalMPPerEpoch() external returns (uint256) envfree;
+  function totalMPRate() external returns (uint256) envfree;
   function accounts(address) external returns(address, uint256, uint256, uint256, uint256, uint256, uint256, uint256) envfree;
 
   function _processAccount(StakeManager.Account storage account, uint256 _limitEpoch) internal with(env e) => markAccountProccessed(e.msg.sender, _limitEpoch);

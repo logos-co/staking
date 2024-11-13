@@ -19,11 +19,11 @@ function getAccountBalance(address addr) returns uint256 {
   return balance;
 }
 
-function getAccountBonusMultiplierPoints(address addr) returns uint256 {
-  uint256 bonusMP;
-  _, _, bonusMP, _, _, _, _, _ = _stakeManager.accounts(addr);
+function getAccountMaxMultiplierPoints(address addr) returns uint256 {
+  uint256 maxMP;
+  _, _, maxMP, _, _, _, _, _ = _stakeManager.accounts(addr);
 
-  return bonusMP;
+  return maxMP;
 }
 
 function getAccountCurrentMultiplierPoints(address addr) returns uint256 {
@@ -40,14 +40,15 @@ function getAccountLockUntil(address addr) returns uint256 {
   return lockUntil;
 }
 
-invariant InitialMPIsNeverSmallerThanBalance(address addr)
-  to_mathint(getAccountBonusMultiplierPoints(addr)) >= to_mathint(getAccountBalance(addr))
+
+invariant MaxMPIsNeverSmallerThanBalance(address addr)
+  to_mathint(getAccountMaxMultiplierPoints(addr)) >= to_mathint(getAccountBalance(addr))
   filtered {
     f -> f.selector != sig:_stakeManager.migrateFrom(address,bool,StakeManager.Account).selector
   }
 
-invariant CurrentMPIsNeverSmallerThanInitialMP(address addr)
-  to_mathint(getAccountCurrentMultiplierPoints(addr)) >= to_mathint(getAccountBonusMultiplierPoints(addr))
+invariant CurrentMPIsNeverSmallerThanBalance(address addr)
+  to_mathint(getAccountCurrentMultiplierPoints(addr)) >= to_mathint(getAccountBalance(addr))
   filtered {
     f -> f.selector != sig:_stakeManager.migrateFrom(address,bool,StakeManager.Account).selector
   }
