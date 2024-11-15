@@ -10,14 +10,7 @@ methods {
   function _.migrateFrom(address, bool, StakeManager.Account) external => NONDET;
   function _.increaseTotalMP(uint256) external => NONDET;
   function _.migrationInitialize(uint256,uint256,uint256,uint256,uint256,uint256,uint256) external => NONDET;
-  function accounts(address) external returns(address, uint256, uint256, uint256, uint256, uint256, uint256, uint256) envfree;
-  function Math.mulDiv(uint256 a, uint256 b, uint256 c) internal returns uint256 => mulDivSummary(a,b,c);
   function _._ external => DISPATCH [] default NONDET;
-}
-
-function mulDivSummary(uint256 a, uint256 b, uint256 c) returns uint256 {
-  require c != 0;
-  return require_uint256(a*b/c);
 }
 
 function isMigrationfunction(method f) returns bool {

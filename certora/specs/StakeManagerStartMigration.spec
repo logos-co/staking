@@ -8,7 +8,6 @@ methods {
   function totalStaked() external returns (uint256) envfree;
   function totalMP() external returns (uint256) envfree;
   function previousManager() external returns (address) envfree;
-  function accounts(address) external returns(address, uint256, uint256, uint256, uint256, uint256, uint256, uint256) envfree;
 
   function _.migrationInitialize(uint256,uint256,uint256,uint256,uint256,uint256,uint256) external => DISPATCHER(true);
   function StakeManagerNew.totalStaked() external returns (uint256) envfree;
