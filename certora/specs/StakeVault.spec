@@ -7,16 +7,9 @@ methods {
   function ERC20A.balanceOf(address) external returns (uint256) envfree;
   function ERC20A.allowance(address, address) external returns(uint256) envfree;
   function ERC20A.totalSupply() external returns(uint256) envfree;
-  function StakeManager.accounts(address) external returns(address, uint256, uint256, uint256, uint256, uint256, uint256, uint256) envfree;
   function _.migrateFrom(address, bool, StakeManager.Account) external => DISPATCHER(true);
   function _.increaseTotalMP(uint256) external => DISPATCHER(true);
   function _.owner() external => DISPATCHER(true);
-  function Math.mulDiv(uint256 a, uint256 b, uint256 c) internal returns uint256 => mulDivSummary(a,b,c);
-}
-
-function mulDivSummary(uint256 a, uint256 b, uint256 c) returns uint256 {
-  require c != 0;
-  return require_uint256(a*b/c);
 }
 
 definition isMigrationFunction(method f) returns bool = (

@@ -1,5 +1,15 @@
 using StakeManager as _stakeManager;
 
+methods {
+  function StakeManager.accounts(address) external returns(address, uint256, uint256, uint256, uint256, uint256, uint256, uint256) envfree;
+  function Math.mulDiv(uint256 a, uint256 b, uint256 c) internal returns uint256 => mulDivSummary(a, b, c);
+}
+
+function mulDivSummary(uint256 a, uint256 b, uint256 c) returns uint256 {
+  require c != 0;
+  return require_uint256(a*b/c);
+}
+
 definition requiresPreviousManager(method f) returns bool = (
   f.selector == sig:_stakeManager.migrationInitialize(uint256,uint256,uint256,uint256,uint256,uint256,uint256).selector ||
   f.selector == sig:_stakeManager.migrateFrom(address,bool,StakeManager.Account).selector ||
@@ -40,6 +50,11 @@ function getAccountLockUntil(address addr) returns uint256 {
   return lockUntil;
 }
 
+function getAccountEpoch(address addr) returns uint256 {
+  uint256 epoch;
+  _, _, _, _, _, _, epoch, _ = _stakeManager.accounts(addr);
+  return epoch;
+}
 
 invariant MaxMPIsNeverSmallerThanBalance(address addr)
   to_mathint(getAccountMaxMultiplierPoints(addr)) >= to_mathint(getAccountBalance(addr))
