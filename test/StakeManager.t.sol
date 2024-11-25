@@ -137,7 +137,7 @@ contract StakeTest is StakeManagerTest {
         assertEq(balance, stakeAmount, "balance of user vault should be equal to stake amount after stake");
         assertEq(
             maxMP,
-            _totalMaxMP(stakeAmount, 0),
+            _maxTotalMP(stakeAmount, 0),
             "maxMP of user vault should be equal to stake amount after stake if no lock"
         );
         assertEq(
@@ -146,7 +146,7 @@ contract StakeTest is StakeManagerTest {
 
         vm.prank(testUser);
         userVault.lock(lockTime);
-        uint256 estimatedMaxMP = maxMP + _accruedMP(stakeAmount, lockTime);
+        uint256 estimatedMaxMP = maxMP + _accrueMP(stakeAmount, lockTime);
         uint256 estimatedTotalMP = _initialMP(stakeAmount) + _bonusMP(stakeAmount, lockTime);
         (, balance, maxMP, totalMP,,,,) = stakeManager.accounts(address(userVault));
         assertEq(balance, stakeAmount, "balance of user vault should be equal to stake amount after lock");
@@ -790,11 +790,11 @@ contract UserFlowsTest is StakeManagerTest {
         );
 
         uint256 epochTarget1;
-        uint256 mpRate = _accruedMP(_stakeAmount, ACCURE_RATE);
-        uint256 mpFractional = mpRate - _accruedMP(_stakeAmount, ACCURE_RATE - _stakeWarpTime);
+        uint256 mpRate = _accrueMP(_stakeAmount, ACCURE_RATE);
+        uint256 mpFractional = mpRate - _accrueMP(_stakeAmount, ACCURE_RATE - _stakeWarpTime);
         uint256 mpRemainder;
         {
-            uint256 mpTarget = _accruedMaxMP(_stakeAmount) + mpFractional;
+            uint256 mpTarget = _maxAccrueMP(_stakeAmount) + mpFractional;
             uint256 deltaEpochTarget1 = (mpTarget / mpRate);
             epochTarget1 = _startEpoch + deltaEpochTarget1;
             if (mpTarget % mpRate > 0) {

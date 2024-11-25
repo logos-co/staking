@@ -61,7 +61,7 @@ abstract contract StakeMath is MultiplierPointMath {
         }
 
         _deltaMpTotal = _initialMP(_increasedAmount) + deltaMpBonus;
-        _newMaxMP = _currentMaxMP + _deltaMpTotal + _accruedMP(_increasedAmount, MAX_MULTIPLIER * YEAR);
+        _newMaxMP = _currentMaxMP + _deltaMpTotal + _accrueMP(_increasedAmount, MAX_MULTIPLIER * YEAR);
 
         require(_newMaxMP <= MP_MPY_ABSOLUTE * (_balance + _increasedAmount), "StakeMath: max multiplier exceeded");
     }
@@ -136,8 +136,8 @@ abstract contract StakeMath is MultiplierPointMath {
         if (newBalance < MIN_BALANCE) {
             revert StakeManager__StakeIsTooLow();
         }
-        _deltaMpTotal = _reducedMP(_currentTotalMP, _balance, _reducedAmount);
-        _deltaMpMax = _reducedMP(_currentMaxMP, _balance, _reducedAmount);
+        _deltaMpTotal = _reduceMP(_balance, _currentTotalMP, _reducedAmount);
+        _deltaMpMax = _reduceMP(_balance, _currentMaxMP, _reducedAmount);
     }
 
     /**
@@ -165,7 +165,7 @@ abstract contract StakeMath is MultiplierPointMath {
             revert StakeManager__AccrueTimeNotReached();
         }
         if (_currentTotalMP < _currentMaxMP) {
-            _deltaMpTotal = Math.min(_accruedMP(_balance, dt), _currentMaxMP - _currentTotalMP);
+            _deltaMpTotal = Math.min(_accrueMP(_balance, dt), _currentMaxMP - _currentTotalMP);
         }
     }
 

@@ -185,7 +185,7 @@ contract DynamicTest is StakeMath, Test {
             require(action.args.length == 1, "Incorrect number of arguments");
             output.stakeAmount = input.stakeAmount;
             output.predictedBonusMP = input.predictedBonusMP;
-            output.increasedAccruedMP = _accruedMP(input.stakeAmount, action.args[0]);
+            output.increasedAccruedMP = _accrueMP(input.stakeAmount, action.args[0]);
             output.predictedAccruedMP = input.predictedAccruedMP + output.increasedAccruedMP;
         }
     }
@@ -340,8 +340,8 @@ contract DynamicTest is StakeMath, Test {
             }
             assertEq(streamer.totalStaked(), globalParams[stage].stakeAmount, "wrong total staked");
             assertEq(streamer.totalMP(), globalParams[stage].predictedBonusMP, "wrong total MP");
-        assertEq(streamer.totalMaxMP(), globalParams[stage].stakeAmount * MAX_MULTIPLIER +
-        globalParams[stage].predictedBonusMP, "wrong totalMaxMP MP");
+        assertEq(streamer.maxTotalMP(), globalParams[stage].stakeAmount * MAX_MULTIPLIER +
+        globalParams[stage].predictedBonusMP, "wrong maxTotalMP MP");
         }
 
         stage++; // second stage =  progress in time
@@ -362,8 +362,8 @@ contract DynamicTest is StakeMath, Test {
             }
             assertEq(streamer.totalStaked(), globalParams[stage].stakeAmount, "wrong total staked");
             assertEq(streamer.totalMP(), globalParams[stage].predictedBonusMP, "wrong total MP");
-        assertEq(streamer.totalMaxMP(), globalParams[stage].stakeAmount * MAX_MULTIPLIER +
-        globalParams[stage].predictedBonusMP, "wrong totalMaxMP MP");
+        assertEq(streamer.maxTotalMP(), globalParams[stage].stakeAmount * MAX_MULTIPLIER +
+        globalParams[stage].predictedBonusMP, "wrong maxTotalMP MP");
         }
 
         stage++; // third stage =  reduce stake
@@ -384,8 +384,8 @@ contract DynamicTest is StakeMath, Test {
             }
             assertEq(streamer.totalStaked(), globalParams[stage].stakeAmount, "wrong total staked");
             assertEq(streamer.totalMP(), globalParams[stage].predictedBonusMP, "wrong total MP");
-        assertEq(streamer.totalMaxMP(), globalParams[stage].stakeAmount * MAX_MULTIPLIER +
-        globalParams[stage].predictedBonusMP, "wrong totalMaxMP MP");
+        assertEq(streamer.maxTotalMP(), globalParams[stage].stakeAmount * MAX_MULTIPLIER +
+        globalParams[stage].predictedBonusMP, "wrong maxTotalMP MP");
         }
     }*/
 }

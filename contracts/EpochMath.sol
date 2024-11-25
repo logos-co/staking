@@ -172,10 +172,10 @@ abstract contract EpochMath is MultiplierPointMath {
         pure
         returns (uint256 mpRate, uint256 mpFractional, uint256 epochTarget1, uint256 mpRemainder)
     {
-        mpRate = _accruedMP(_balance, ACCURE_RATE);
-        mpFractional = mpRate - _accruedMP(_balance, _deltaTime);
+        mpRate = _accrueMP(_balance, ACCURE_RATE);
+        mpFractional = mpRate - _accrueMP(_balance, _deltaTime);
 
-        uint256 mpTarget = _accruedMaxMP(_balance) + mpFractional;
+        uint256 mpTarget = _maxAccrueMP(_balance) + mpFractional;
         uint256 deltaEpochTarget1 = mpTarget / mpRate;
 
         epochTarget1 = _accountEpoch + deltaEpochTarget1;

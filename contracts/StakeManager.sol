@@ -179,7 +179,7 @@ contract StakeManager is StakeMath, EpochMath, TrustedCodehashAccess, IStakeMana
             revert StakeManager__InvalidLockTime();
         }
         //mints bonus multiplier points for seconds increased
-        uint256 bonusMP = _accruedMP(account.balance, _secondsIncrease);
+        uint256 bonusMP = _accrueMP(account.balance, _secondsIncrease);
 
         //update account storage
         account.lockUntil = lockUntil;
@@ -339,7 +339,7 @@ contract StakeManager is StakeMath, EpochMath, TrustedCodehashAccess, IStakeMana
      * @param epoch Epoch to increment total supply
      */
     function _mintMP(Account storage account, uint256 processTime, Epoch storage epoch) private {
-        uint256 accruedMP = _accruedMP(account.balance, processTime - account.lastMint);
+        uint256 accruedMP = _accrueMP(account.balance, processTime - account.lastMint);
         if (accruedMP + account.totalMP > account.maxMP) {
             accruedMP = account.maxMP - account.totalMP; //how much left to reach cap
         }
@@ -369,7 +369,7 @@ contract StakeManager is StakeMath, EpochMath, TrustedCodehashAccess, IStakeMana
      * @return mp multiplier points to mint
      */
     function calculateMP(uint256 _balance, uint256 _deltaTime) public pure returns (uint256 mp) {
-        return _accruedMP(_balance, _deltaTime);
+        return _accrueMP(_balance, _deltaTime);
     }
 
     /**
