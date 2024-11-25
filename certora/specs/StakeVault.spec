@@ -1,5 +1,3 @@
-import "./shared.spec";
-
 using ERC20A as staked;
 using StakeManager as stakeManager;
 
@@ -7,23 +5,22 @@ methods {
   function ERC20A.balanceOf(address) external returns (uint256) envfree;
   function ERC20A.allowance(address, address) external returns(uint256) envfree;
   function ERC20A.totalSupply() external returns(uint256) envfree;
-  function _.migrateFrom(address, bool, StakeManager.Account) external => DISPATCHER(true);
-  function _.increaseTotalMP(uint256) external => DISPATCHER(true);
+  function StakeManager.accounts(address) external returns(address, uint256, uint256, uint256, uint256, uint256, uint256, uint256) envfree;
+
   function _.owner() external => DISPATCHER(true);
 }
 
-definition isMigrationFunction(method f) returns bool = (
-  f.selector == sig:stakeManager.migrationInitialize(uint256,uint256,uint256,uint256,uint256,uint256,uint256).selector ||
-  f.selector == sig:stakeManager.migrateFrom(address,bool,StakeManager.Account).selector ||
-  f.selector == sig:stakeManager.increaseTotalMP(uint256).selector ||
-  f.selector == sig:stakeManager.startMigration(address).selector
-  );
+function getAccountBalance(address _addr) returns uint256 {
+  uint256 balance;
+  _, balance, _, _, _, _, _, _ = stakeManager.accounts(_addr);
+  return balance;
+}
 
 // check that the ERC20.balanceOf(vault) is >= to StakeManager.accounts[a].balance
 invariant accountBalanceVsERC20Balance()
   staked.balanceOf(currentContract) >= getAccountBalance(currentContract)
   filtered {
-    m -> m.selector != sig:leave().selector && !isMigrationFunction(m)
+    m -> m.selector != sig:leave().selector
   }
   { preserved with (env e) {
       // the sender can't be the vault otherwise it can transfer tokens
@@ -48,9 +45,7 @@ invariant accountBalanceVsERC20Balance()
     }
 
     preserved stake(uint256 amount, uint256 duration) with (env e) {
-
       require e.msg.sender != currentContract;
-
       require staked.balanceOf(currentContract) + staked.balanceOf(e.msg.sender) + staked.balanceOf(stakeManager) <= to_mathint(staked.totalSupply());
     }
   }
@@ -62,7 +57,7 @@ function simplification() {
   require stakeManager.migration == 0;
 }
 
-rule reachability(method f) filtered { f -> !isMigrationFunction(f) }
+rule reachability(method f)
  {
   calldataarg args;
   env e;

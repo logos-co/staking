@@ -1,15 +1,15 @@
-import "./shared.spec";
+import "./definition/DefinitionMath.spec";
+import "./definition/DefinitionMultiplierPointsMath.spec";
+import "./math/OpenZeppelinMath.spec";
+import "./IStakeManager.spec";
 
 using ERC20A as staked;
+using StakeManager as _stakeManager;
 
 methods {
   function staked.balanceOf(address) external returns (uint256) envfree;
   function totalStaked() external returns (uint256) envfree;
   function totalMP() external returns (uint256) envfree;
-  function previousManager() external returns (address) envfree;
-  function _.migrateFrom(address, bool, StakeManager.Account) external => NONDET;
-  function _.increaseTotalMP(uint256) external => NONDET;
-  function _.migrationInitialize(uint256,uint256,uint256,uint256,uint256,uint256,uint256) external => NONDET;
   function _._ external => DISPATCH [] default NONDET;
 }
 
@@ -24,7 +24,6 @@ function isMigrationfunction(method f) returns bool {
  cases where it is zero. specifically no externall call to the migration contract */
 function simplification(env e) {
   require currentContract.migration == 0;
-  require currentContract.previousManager() == 0;
   require e.msg.sender != 0;
 }
 
@@ -58,16 +57,22 @@ hook Sload uint256 newValue accounts[KEY address addr].totalMP {
     require sumOfMultipliers >= to_mathint(newValue);
 }
 
+invariant MaxMPIsNeverSmallerThanBalance(address addr)
+  to_mathint(getAccountMaxMPs(addr)) >= to_mathint(getAccountBalance(addr));
+
+invariant CurrentMPIsNeverSmallerThanBalance(address addr)
+  to_mathint(getAccountTotalMPs(addr)) >= to_mathint(getAccountBalance(addr));
+
 invariant sumOfBalancesIsTotalSupplyBalance()
   sumOfBalances == to_mathint(totalStaked())
   filtered {
-    m -> !requiresPreviousManager(m) && !requiresNextManager(m)
+    m -> !requiresNextManager(m)
   }
 
 invariant sumOfMultipliersIsMultiplierSupply()
   sumOfMultipliers == to_mathint(totalMP())
   filtered {
-    m -> !requiresPreviousManager(m) && !requiresNextManager(m)
+    m ->  !requiresNextManager(m)
   }
   { preserved with (env e){
     requireInvariant accountMPIsZeroIfBalanceIsZero(e.msg.sender);
@@ -85,20 +90,14 @@ invariant sumOfEpochRewardsIsPendingRewards()
 invariant highEpochsAreNull(uint256 epochNumber)
   epochNumber >= currentContract.currentEpoch => currentContract.epochs[epochNumber].epochReward == 0
   filtered {
-    m -> !requiresPreviousManager(m) && !requiresNextManager(m)
+    m -> !requiresNextManager(m)
   }
 
 invariant accountMaxMPIsZeroIfBalanceIsZero(address addr)
-  to_mathint(getAccountBalance(addr)) == 0 => to_mathint(getAccountMaxMultiplierPoints(addr)) == 0
-  filtered {
-    f -> f.selector != sig:migrateFrom(address,bool,StakeManager.Account).selector
-  }
+  to_mathint(getAccountBalance(addr)) == 0 => to_mathint(getAccountMaxMPs(addr)) == 0;
 
 invariant accountMPIsZeroIfBalanceIsZero(address addr)
-  to_mathint(getAccountBalance(addr)) == 0 => to_mathint(getAccountCurrentMultiplierPoints(addr)) == 0
-  filtered {
-    f -> f.selector != sig:migrateFrom(address,bool,StakeManager.Account).selector
-  }
+  to_mathint(getAccountBalance(addr)) == 0 => to_mathint(getAccountTotalMPs(addr)) == 0;
 
 rule reachability(method f)
 {
@@ -122,12 +121,12 @@ rule stakingMintsMultiplierPoints1To1Ratio {
 
   require getAccountLockUntil(e.msg.sender) <= e.block.timestamp;
 
-  multiplierPointsBefore = getAccountMaxMultiplierPoints(e.msg.sender);
+  multiplierPointsBefore = getAccountMaxMPs(e.msg.sender);
   stake(e, amount, lockupTime);
-  multiplierPointsAfter = getAccountMaxMultiplierPoints(e.msg.sender);
-//
+  multiplierPointsAfter = getAccountMaxMPs(e.msg.sender);
+
   assert lockupTime == 0 => to_mathint(multiplierPointsAfter) == amount * 5;
-  assert to_mathint(multiplierPointsAfter) == to_mathint(amount + ((amount * 100) * ((4 * 31556925) + lockupTime)) / (31556925 * 100));
+  assert to_mathint(multiplierPointsAfter) == maxTotalMP(amount, lockupTime);
 }
 
 rule stakingGreaterLockupTimeMeansGreaterMPs {
@@ -142,10 +141,10 @@ rule stakingGreaterLockupTimeMeansGreaterMPs {
   storage initalStorage = lastStorage;
 
   stake(e, amount, lockupTime1);
-  maxMPAfter1 = getAccountMaxMultiplierPoints(e.msg.sender);
+  maxMPAfter1 = getAccountMaxMPs(e.msg.sender);
 
   stake(e, amount, lockupTime2) at initalStorage;
-  maxMPAfter2 = getAccountMaxMultiplierPoints(e.msg.sender);
+  maxMPAfter2 = getAccountMaxMPs(e.msg.sender);
 
   assert lockupTime1 >= lockupTime2 => to_mathint(maxMPAfter1) >= to_mathint(maxMPAfter2);
   satisfy to_mathint(maxMPAfter1) > to_mathint(maxMPAfter2);

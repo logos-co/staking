@@ -1,16 +1,10 @@
-import "./shared.spec";
+import "./IStakeManager.spec";
 
 using ERC20A as staked;
 
 methods {
   function staked.balanceOf(address) external returns (uint256) envfree;
-  function totalStaked() external returns (uint256) envfree;
-  function totalMP() external returns (uint256) envfree;
-  function totalMPRate() external returns (uint256) envfree;
-
-  function _processAccount(StakeManager.Account storage account, uint256 _limitEpoch) internal with(env e) => markAccountProccessed(e.msg.sender, _limitEpoch);
-  function _.migrationInitialize(uint256,uint256,uint256,uint256,uint256,uint256,uint256) external => NONDET;
-  function potentialMP() external returns (uint256) envfree;
+  function _processAccount(IStakeManager.Account storage account, uint256 _limitEpoch) internal with(env e) => markAccountProccessed(e.msg.sender, _limitEpoch);
 }
 
 // keeps track of the last epoch an account was processed
@@ -35,7 +29,7 @@ hook Sstore accounts[KEY address addr].balance uint256 newValue (uint256 oldValu
   https://prover.certora.com/output/40726/055d52bc67154e3fbea330fd7d68d36d/?anonymousKey=73030555b4cefe429d4eed6718b9a7e5be3a22c8
 */
 rule checkAccountProcessedBeforeStoring(method f) filtered {
-  f -> !requiresPreviousManager(f) && !requiresNextManager(f) && f.selector != sig:stake(uint256,uint256).selector
+  f -> !requiresNextManager(f) && f.selector != sig:stake(uint256,uint256).selector && f.selector != sig:startMigration(address).selector
 } {
   address account;
 
