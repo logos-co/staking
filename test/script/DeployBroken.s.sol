@@ -11,7 +11,7 @@ contract DeployBroken is BaseScript {
         BrokenERC20 token = new BrokenERC20();
 
         vm.startBroadcast(broadcaster);
-        StakeManager stakeManager = new StakeManager(address(token), address(0));
+        StakeManager stakeManager = new StakeManager(address(token));
         VaultFactory vaultFactory = new VaultFactory(address(stakeManager));
         vm.stopBroadcast();
 

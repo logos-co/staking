@@ -4,6 +4,10 @@ pragma solidity ^0.8.27;
 import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 import { IStakeConstants } from "./interfaces/IStakeConstants.sol";
 
+/**
+ * @title MultiplierPointMath
+ * @notice Provides mathematical operations and utilities for managing multiplier points in the staking system.
+ */
 abstract contract MultiplierPointMath is IStakeConstants {
     /// @notice One (mean) tropical year, in seconds.
     uint256 public constant YEAR = 365 days + 5 hours + 48 minutes + 45 seconds;
@@ -19,15 +23,17 @@ abstract contract MultiplierPointMath is IStakeConstants {
     uint256 public constant ACCURE_RATE = 1 weeks;
     /// @notice Minimal value to generate 1 multiplier point in the accrue rate period (rounded up).
     uint256 public constant MIN_BALANCE = (((YEAR * 100) - 1) / (MP_APY * ACCURE_RATE)) + 1;
+    /// @notice Maximum value to not overflow unsigned integer of 256 bits.
+    uint256 public constant MAX_BALANCE = type(uint256).max / (MP_APY * ACCURE_RATE);
 
     /**
      * @notice Calculates the accrued multiplier points (MPs) over a time period Δt, based on the account balance
      * @param _balance Represents the current account balance
      * @param _deltaTime The time difference or the duration over which the multiplier points are accrued, expressed in
      * seconds
-     * @return _accuredMP points accured for given `_amount` and  `_seconds`
+     * @return _accruedMP points accrued for given `_amount` and  `_seconds`
      */
-    function _calculateAccuredMP(uint256 _balance, uint256 _deltaTime) internal pure returns (uint256 _accuredMP) {
+    function _accruedMP(uint256 _balance, uint256 _deltaTime) internal pure returns (uint256 _accruedMP) {
         return Math.mulDiv(_balance, _deltaTime * MP_APY, YEAR * 100);
     }
 
@@ -40,8 +46,8 @@ abstract contract MultiplierPointMath is IStakeConstants {
      * @param _lockedSeconds time in seconds locked
      * @return _bonusMP bonus multiplier points for given `_amount` and `_lockedSeconds`
      */
-    function _calculateBonusMP(uint256 _amount, uint256 _lockedSeconds) internal pure returns (uint256 _bonusMP) {
-        return _calculateAccuredMP(_amount, _lockedSeconds);
+    function _bonusMP(uint256 _amount, uint256 _lockedSeconds) internal pure returns (uint256 _bonusMP) {
+        return _accruedMP(_amount, _lockedSeconds);
     }
 
     /**
@@ -49,38 +55,38 @@ abstract contract MultiplierPointMath is IStakeConstants {
      * the amount of balance added.
      * @param _amount Represents the change in balance.
      */
-    function _calculateInitialMP(uint256 _amount) internal pure returns (uint256 _initialMP) {
+    function _initialMP(uint256 _amount) internal pure returns (uint256 _initialMP) {
         return _amount;
     }
 
     /**
      * @notice Calculates the reduction in multiplier points (MPs) when a portion of the balance Δa `_reducedAmount` is
-     * removed from the total balance a_bal `_currentBalance`.
+     * removed from the total balance a_bal `_balance`.
      * The reduction is proportional to the ratio of the removed balance to the total balance, applied to the current
      * multiplier points $mp$.
      * @param _mp Represents the current multiplier points
-     * @param _currentBalance The total account balance before the removal of Δa `_reducedBalance`
+     * @param _balance The total account balance before the removal of Δa `_reducedBalance`
      * @param _reducedAmount reduced balance
      * @return _reducedMP Multiplier points to reduce from `_mp`
      */
-    function _calculateReducedMP(
+    function _reducedMP(
         uint256 _mp,
-        uint256 _currentBalance,
+        uint256 _balance,
         uint256 _reducedAmount
     )
         public
         pure
         returns (uint256 _reducedMP)
     {
-        return Math.mulDiv(_mp, _currentBalance, _reducedAmount);
+        return Math.mulDiv(_mp, _balance, _reducedAmount);
     }
 
     /**
      * @notice Calculates maximum stake a given `_amount` can be generated with `MAX_MULTIPLIER`
      * @param _balance quantity of tokens
-     * @return _maxMPAccured maximum quantity of muliplier points that can be generated for given `_amount`
+     * @return _maxMPAccrued maximum quantity of muliplier points that can be generated for given `_amount`
      */
-    function _calculateMaxAccuredMP(uint256 _balance) internal pure returns (uint256 _maxMPAccured) {
+    function _accruedMaxMP(uint256 _balance) internal pure returns (uint256 _maxMPAccrued) {
         return Math.mulDiv(_balance, MP_MPY, 100);
     }
 
@@ -89,35 +95,77 @@ abstract contract MultiplierPointMath is IStakeConstants {
      * duration.
      * @param _balance Represents the current account balance
      * @param _lockTime The time duration for which the balance is locked
-     * @return _maxMP Maximum multiplier points that can be generated for given `_balance` and `_lockTime`
+     * @return _maxMP Maximum Multiplier Points that can be generated for given `_balance` and `_lockTime`
      */
-    function _calculateMaxMP(uint256 _balance, uint256 _lockTime) internal pure returns (uint256 _maxMP) {
+    function _totalMaxMP(uint256 _balance, uint256 _lockTime) internal pure returns (uint256 _maxMP) {
         return _balance + Math.mulDiv(_balance * MP_APY, (MAX_MULTIPLIER * YEAR) + _lockTime, YEAR * 100);
     }
 
     /**
-     * @dev Caution: This value is estimated and can be incorrect due precision loss.
-     * @notice Calculates the remaining lock time available for a given `_mpMax` and `_currentBalance`
-     * @param _mpMax Maximum multiplier points calculated from the current balance.
-     * @param _currentBalance Current balance used to calculate the maximum multiplier points.
+     * @notice The absolute maximum multiplier points that some balance could have, which is the sum of the maximum
+     * lockup time bonus and the maximum accrued multiplier points.
+     * @param _balance quantity of tokens
+     * @return _maxMPAbsolute Absolute Maximum Multiplier Points
      */
-    function _remainingLockTimeAvailable(
-        uint256 _mpMax,
-        uint256 _currentBalance
-    )
-        public
-        pure
-        returns (uint256 _lockTime)
-    {
-        return Math.mulDiv((_currentBalance * MP_MPY_ABSOLUTE) - _mpMax, YEAR, _currentBalance * 100);
+    function _absoluteMaxMP(uint256 _balance) internal pure returns (uint256 _maxMPAbsolute) {
+        return Math.mulDiv(_balance, MP_MPY_ABSOLUTE, 100);
     }
 
     /**
-     * @notice Calculates the lock time for a given bonus multiplier points\ and current balance.
-     * @param _bonusMP bonus multiplier points intended to be generated
-     * @param _currentBalance current balance
+     * @dev Caution: This value is estimated and can be incorrect due precision loss.
+     * @notice Calculates the remaining lock time available for a given `_mpMax` and `_balance`
+     * @param _mpMax Maximum multiplier points calculated from the current balance.
+     * @param _balance Current balance used to calculate the maximum multiplier points.
      */
-    function _calculateLockTime(uint256 _bonusMP, uint256 _currentBalance) internal pure returns (uint256 _lockTime) {
-        return Math.mulDiv(_bonusMP * 100, YEAR, _currentBalance * MP_APY);
+    function _lockTimeAvailable(uint256 _mpMax, uint256 _balance) public pure returns (uint256 _lockTime) {
+        return Math.mulDiv((_balance * MP_MPY_ABSOLUTE) - _mpMax, YEAR, _balance * 100);
+    }
+
+    /**
+     * @notice Calculates the lock time for a given bonus multiplier points and current balance.
+     * @param _bonusMP bonus multiplier points intended to be generated
+     * @param _balance current balance
+     */
+    function _lockTime(uint256 _bonusMP, uint256 _balance) internal pure returns (uint256 _lockTime) {
+        return Math.mulDiv(_bonusMP * 100, YEAR, _balance * MP_APY);
+    }
+
+    /**
+     * @notice Calculates the time required to accrue a specific multiplier point value.
+     * @param _balance The current balance.
+     * @param _mp The target multiplier points to accrue.
+     * @return _timeToReachMaxMP The time required to reach the specified multiplier points, in seconds.
+     */
+    function _timeToAccrueMP(uint256 _balance, uint256 _mp) internal pure returns (uint256 _timeToReachMaxMP) {
+        return Math.mulDiv(_mp * 100, YEAR, _balance * MP_APY);
+    }
+
+    /**
+     * @notice Calculates the bonus multiplier points based on the balance and maximum multiplier points.
+     * @param _balance The current balance.
+     * @param _maxMP The maximum multiplier points.
+     * @return _bonusMP The calculated bonus multiplier points.
+     */
+    function _retrieveBonusMP(uint256 _balance, uint256 _maxMP) internal pure returns (uint256 _bonusMP) {
+        return _maxMP - (_balance + _accruedMaxMP(_balance));
+    }
+
+    /**
+     * @notice Retrieves the accrued multiplier points based on the total and maximum multiplier points.
+     * @param _balance The current balance.
+     * @param _totalMP The total multiplier points.
+     * @param _maxMP The maximum multiplier points.
+     * @return _accruedMP The calculated accrued multiplier points.
+     */
+    function _retrieveAccruedMP(
+        uint256 _balance,
+        uint256 _totalMP,
+        uint256 _maxMP
+    )
+        internal
+        pure
+        returns (uint256 _accruedMP)
+    {
+        return _totalMP + _accruedMaxMP(_balance) - _maxMP;
     }
 }

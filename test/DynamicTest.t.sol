@@ -7,7 +7,8 @@ import { Test, console } from "forge-std/Test.sol";
 import { Deploy } from "../script/Deploy.s.sol";
 import { DeployMigrationStakeManager } from "../script/DeployMigrationStakeManager.s.sol";
 import { DeploymentConfig } from "../script/DeploymentConfig.s.sol";
-import { TrustedCodehashAccess, StakeManager, ExpiredStakeStorage } from "../contracts/StakeManager.sol";
+import { TrustedCodehashAccess, StakeManager } from "../contracts/StakeManager.sol";
+import { ExpiredStakeStorage } from "../contracts/storage/ExpiredStakeStorage.sol";
 import { StakeMath } from "../contracts/StakeMath.sol";
 import { StakeVault } from "../contracts/StakeVault.sol";
 import { VaultFactory } from "../contracts/VaultFactory.sol";
@@ -114,9 +115,9 @@ contract DynamicTest is StakeMath, Test {
 
     struct VaultState {
         StakeVault vault;
-        uint256 increasedAccuredMP;
+        uint256 increasedAccruedMP;
         uint256 predictedBonusMP;
-        uint256 predictedAccuredMP;
+        uint256 predictedAccruedMP;
         uint256 stakeAmount;
     }
 
@@ -184,8 +185,8 @@ contract DynamicTest is StakeMath, Test {
             require(action.args.length == 1, "Incorrect number of arguments");
             output.stakeAmount = input.stakeAmount;
             output.predictedBonusMP = input.predictedBonusMP;
-            output.increasedAccuredMP = _calculateAccuredMP(input.stakeAmount, action.args[0]);
-            output.predictedAccuredMP = input.predictedAccuredMP + output.increasedAccuredMP;
+            output.increasedAccruedMP = _accruedMP(input.stakeAmount, action.args[0]);
+            output.predictedAccruedMP = input.predictedAccruedMP + output.increasedAccruedMP;
         }
     }
 
@@ -208,30 +209,30 @@ contract DynamicTest is StakeMath, Test {
             //output.vault = _createVault(address(uint160(action.args[0])));
             output.stakeAmount = 0;
             output.predictedBonusMP = 0;
-            output.increasedAccuredMP = 0;
-            output.predictedAccuredMP = 0;
+            output.increasedAccruedMP = 0;
+            output.predictedAccruedMP = 0;
         } else if (action.method == VaultMethod.STAKE) {
             require(action.args.length == 2, "Incorrect number of arguments");
             output.stakeAmount = input.stakeAmount + action.args[0];
-            output.predictedBonusMP = _calculateBonusMP(output.stakeAmount, action.args[1]);
-            output.increasedAccuredMP = input.increasedAccuredMP;
-            output.predictedAccuredMP = input.predictedAccuredMP;
+            output.predictedBonusMP = _bonusMP(output.stakeAmount, action.args[1]);
+            output.increasedAccruedMP = input.increasedAccruedMP;
+            output.predictedAccruedMP = input.predictedAccruedMP;
         } else if (action.method == VaultMethod.UNSTAKE) {
             require(action.args.length == 1, "Incorrect number of arguments");
             output.stakeAmount = input.stakeAmount - action.args[0];
             output.predictedBonusMP = (output.stakeAmount * input.predictedBonusMP) / input.stakeAmount;
-            output.increasedAccuredMP = input.increasedAccuredMP;
-            output.predictedAccuredMP = (output.stakeAmount * input.predictedAccuredMP) / input.stakeAmount;
+            output.increasedAccruedMP = input.increasedAccruedMP;
+            output.predictedAccruedMP = (output.stakeAmount * input.predictedAccruedMP) / input.stakeAmount;
         } else if (action.method == VaultMethod.LOCK) {
             require(action.args.length == 1, "Incorrect number of arguments");
             output.stakeAmount = input.stakeAmount;
-            output.predictedBonusMP = _calculateBonusMP(output.stakeAmount, action.args[0]);
-            output.increasedAccuredMP = input.increasedAccuredMP;
-            output.predictedAccuredMP = input.predictedAccuredMP + output.increasedAccuredMP;
+            output.predictedBonusMP = _bonusMP(output.stakeAmount, action.args[0]);
+            output.increasedAccruedMP = input.increasedAccruedMP;
+            output.predictedAccruedMP = input.predictedAccruedMP + output.increasedAccruedMP;
         }
     }
     /*
-    function testFuzz_UnstakeBonusMPAndAccuredMP(
+    function testFuzz_UnstakeBonusMPAndAccruedMP(
         uint256 amountStaked,
         uint256 secondsLocked,
         uint256 reducedStake,
@@ -268,10 +269,10 @@ contract DynamicTest is StakeMath, Test {
             {
                 UserActions memory userActions = actions[stage].userActions[0];
                 userParams[stage][0].stakeAmount = userActions.stakeIncrease;
-        userParams[stage][0].predictedBonusMP = _calculateBonusMP(userActions.stakeIncrease,
+        userParams[stage][0].predictedBonusMP = _bonusMP(userActions.stakeIncrease,
         userActions.lockupIncrease);
-                userParams[stage][0].increasedAccuredMP = 0; //no increased accured MP in first stage
-                userParams[stage][0].predictedAccuredMP = 0; //no accured MP in first stage
+                userParams[stage][0].increasedAccruedMP = 0; //no increased accrued MP in first stage
+                userParams[stage][0].predictedAccruedMP = 0; //no accrued MP in first stage
             }
         }
 
@@ -293,10 +294,10 @@ contract DynamicTest is StakeMath, Test {
         userParams[stage][0].stakeAmount = userParams[stage-1][0].stakeAmount; //no changes in stake at second stage
         userParams[stage][0].predictedBonusMP =  userParams[stage-1][0].predictedBonusMP; //no changes in bonusMP at
         second stage
-        userParams[stage][0].increasedAccuredMP = _calculeAccuredMP(amountStaked, timestamp[stage] -
+        userParams[stage][0].increasedAccruedMP = _calculeAccruedMP(amountStaked, timestamp[stage] -
         timestamp[stage-1]);
-        userParams[stage][0].predictedAccuredMP = userParams[stage-1][0].predictedAccuredMP +
-        userParams[stage][0].increasedAccuredMP; 
+        userParams[stage][0].predictedAccruedMP = userParams[stage-1][0].predictedAccruedMP +
+        userParams[stage][0].increasedAccruedMP; 
             }
         }
 
@@ -311,11 +312,11 @@ contract DynamicTest is StakeMath, Test {
                 //if the account reduced 50% of its stake, the bonusMP should be reduced by 50%
         userParams[stage][0].predictedBonusMP = (userParams[stage][0].stakeAmount *
         userParams[stage-1][0].predictedBonusMP) / userParams[stage-1][0].stakeAmount;
-                userParams[stage][0].increasedAccuredMP = 0; //no accuredMP in third stage;
-        //total accuredMP from this stage is a proportion from the difference of current stakeAmount and past stage
+                userParams[stage][0].increasedAccruedMP = 0; //no accruedMP in third stage;
+        //total accruedMP from this stage is a proportion from the difference of current stakeAmount and past stage
         stakeAmount
-                //if the account reduced 50% of its stake, the accuredMP should be reduced by 50%
-        userParams[stage][0].predictedAccuredMP = (userParams[stage][0].stakeAmount * predictedAccuredMP[stage-1]) /
+                //if the account reduced 50% of its stake, the accruedMP should be reduced by 50%
+        userParams[stage][0].predictedAccruedMP = (userParams[stage][0].stakeAmount * predictedAccruedMP[stage-1]) /
         userParams[stage-1][0].stakeAmount;;
             }
         }
@@ -327,15 +328,15 @@ contract DynamicTest is StakeMath, Test {
             for(uint i = 0; i < users[stage].length; i++) {
                 RewardsStreamerMP.UserInfo memory userInfo = streamer.getUserInfo(users[stage][i]);
                 assertEq(userInfo.stakedBalance, userParams[stage][i].stakeAmount, "wrong user staked balance");
-        assertEq(userInfo.userMP, userParams[stage][i].predictedAccuredMP + userParams[stage][i].predictedBonusMP,
+        assertEq(userInfo.userMP, userParams[stage][i].predictedAccruedMP + userParams[stage][i].predictedBonusMP,
         "wrong user MP");
         assertEq(userInfo.maxMP, userParams[stage][i].stakeAmount * MAX_MULTIPLIER
         +userParams[stage][i].predictedBonusMP, "wrong user max MP");
                 //sum all usersParams to globalParams
                 globalParams[stage].stakeAmount += userParams[stage][i].stakeAmount;
                 globalParams[stage].predictedBonusMP += userParams[stage][i].predictedBonusMP;
-                globalParams[stage].increasedAccuredMP += userParams[stage][i].increasedAccuredMP;
-                globalParams[stage].predictedAccuredMP += userParams[stage][i].predictedAccuredMP;
+                globalParams[stage].increasedAccruedMP += userParams[stage][i].increasedAccruedMP;
+                globalParams[stage].predictedAccruedMP += userParams[stage][i].predictedAccruedMP;
             }
             assertEq(streamer.totalStaked(), globalParams[stage].stakeAmount, "wrong total staked");
             assertEq(streamer.totalMP(), globalParams[stage].predictedBonusMP, "wrong total MP");
@@ -349,15 +350,15 @@ contract DynamicTest is StakeMath, Test {
             for(uint i = 0; i < users[stage].length; i++) {
                 RewardsStreamerMP.UserInfo memory userInfo = streamer.getUserInfo(users[stage][i]);
                 assertEq(userInfo.stakedBalance, userParams[stage][i].stakeAmount, "wrong user staked balance");
-        assertEq(userInfo.userMP, userParams[stage][i].predictedAccuredMP + userParams[stage][i].predictedBonusMP,
+        assertEq(userInfo.userMP, userParams[stage][i].predictedAccruedMP + userParams[stage][i].predictedBonusMP,
         "wrong user MP");
         assertEq(userInfo.maxMP, userParams[stage][i].stakeAmount * MAX_MULTIPLIER
         +userParams[stage][i].predictedBonusMP, "wrong user max MP");
                 //sum all usersParams to globalParams
                 globalParams[stage].stakeAmount += userParams[stage][i].stakeAmount;
                 globalParams[stage].predictedBonusMP += userParams[stage][i].predictedBonusMP;
-                globalParams[stage].increasedAccuredMP += userParams[stage][i].increasedAccuredMP;
-                globalParams[stage].predictedAccuredMP += userParams[stage][i].predictedAccuredMP;
+                globalParams[stage].increasedAccruedMP += userParams[stage][i].increasedAccruedMP;
+                globalParams[stage].predictedAccruedMP += userParams[stage][i].predictedAccruedMP;
             }
             assertEq(streamer.totalStaked(), globalParams[stage].stakeAmount, "wrong total staked");
             assertEq(streamer.totalMP(), globalParams[stage].predictedBonusMP, "wrong total MP");
@@ -371,15 +372,15 @@ contract DynamicTest is StakeMath, Test {
             for(uint i = 0; i < users[stage].length; i++) {
                 RewardsStreamerMP.UserInfo memory userInfo = streamer.getUserInfo(users[stage][i]);
                 assertEq(userInfo.stakedBalance, userParams[stage][i].stakeAmount, "wrong user staked balance");
-        assertEq(userInfo.userMP, userParams[stage][i].predictedAccuredMP + userParams[stage][i].predictedBonusMP,
+        assertEq(userInfo.userMP, userParams[stage][i].predictedAccruedMP + userParams[stage][i].predictedBonusMP,
         "wrong user MP");
         assertEq(userInfo.maxMP, userParams[stage][i].stakeAmount * MAX_MULTIPLIER +
         userParams[stage][i].predictedBonusMP, "wrong user max MP");
                 //sum all usersParams to globalParams
                 globalParams[stage].stakeAmount += userParams[stage][i].stakeAmount;
                 globalParams[stage].predictedBonusMP += userParams[stage][i].predictedBonusMP;
-                globalParams[stage].increasedAccuredMP += userParams[stage][i].increasedAccuredMP;
-                globalParams[stage].predictedAccuredMP += userParams[stage][i].predictedAccuredMP;
+                globalParams[stage].increasedAccruedMP += userParams[stage][i].increasedAccruedMP;
+                globalParams[stage].predictedAccruedMP += userParams[stage][i].predictedAccruedMP;
             }
             assertEq(streamer.totalStaked(), globalParams[stage].stakeAmount, "wrong total staked");
             assertEq(streamer.totalMP(), globalParams[stage].predictedBonusMP, "wrong total MP");

@@ -5,59 +5,29 @@ pragma solidity ^0.8.27;
 import { IERC20 } from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 
-import { TrustedCodehashAccess } from "./access/TrustedCodehashAccess.sol";
 import { ExpiredStakeStorage } from "./storage/ExpiredStakeStorage.sol";
+import { TrustedCodehashAccess } from "./access/TrustedCodehashAccess.sol";
 import { IStakeManager } from "./interfaces/IStakeManager.sol";
-import { MultiplierPointMath } from "./MultiplierPointMath.sol";
 import { EpochMath } from "./EpochMath.sol";
 import { StakeMath } from "./StakeMath.sol";
 import { StakeVault } from "./StakeVault.sol";
+import { IStakeManagerUpdated } from "./interfaces/IStakeManagerUpdated.sol";
 
 contract StakeManager is StakeMath, EpochMath, TrustedCodehashAccess, IStakeManager {
     error StakeManager__NoPendingMigration();
     error StakeManager__PendingMigration();
-    error StakeManager__SenderIsNotPreviousStakeManager();
     error StakeManager__InvalidLimitEpoch();
     error StakeManager__AccountNotInitialized();
     error StakeManager__InvalidMigration();
     error StakeManager__AlreadyProcessedEpochs();
     error StakeManager__AlreadyStaked();
 
-    struct Account {
-        address rewardAddress;
-        uint256 balance;
-        uint256 maxMP;
-        uint256 totalMP;
-        uint256 lastMint;
-        uint256 lockUntil;
-        uint256 epoch;
-        uint256 startEpoch;
-    }
-
-    struct Epoch {
-        uint256 epochReward;
-        uint256 totalSupply;
-        uint256 potentialMP;
-    }
-
     mapping(address index => Account value) public accounts;
-    mapping(uint256 index => Epoch value) public epochs;
 
-    uint256 public currentEpoch;
-    uint256 public pendingReward;
-    uint256 public immutable startTime;
-
-    uint256 public potentialMP;
     uint256 public totalMP;
     uint256 public totalStaked;
-    uint256 public totalMPRate;
 
-    ExpiredStakeStorage public expiredStakeStorage;
-
-    uint256 public currentEpochTotalExpiredMP;
-
-    StakeManager public migration;
-    StakeManager public immutable previousManager;
+    IStakeManagerUpdated public migration;
     IERC20 public immutable REWARD_TOKEN;
     IERC20 public immutable STAKING_TOKEN;
 
@@ -88,111 +58,55 @@ contract StakeManager is StakeMath, EpochMath, TrustedCodehashAccess, IStakeMana
         _;
     }
 
-    /**
-     * @notice Only callable from old manager.
-     */
-    modifier onlyPreviousManager() {
-        if (msg.sender != address(previousManager)) {
-            revert StakeManager__SenderIsNotPreviousStakeManager();
-        }
-        _;
+    constructor(address _rewardToken) EpochMath(block.timestamp) {
+        REWARD_TOKEN = IERC20(_rewardToken);
+        STAKING_TOKEN = IERC20(_rewardToken);
     }
 
     /**
-     * @notice Release rewards for current epoch and increase epoch up to _limitEpoch
-     * @param _limitEpoch Until what epoch it should be executed
-     */
-    function finalizeEpoch(uint256 _limitEpoch) private {
-        uint256 tempCurrentEpoch = currentEpoch;
-        while (tempCurrentEpoch < _limitEpoch) {
-            Epoch storage thisEpoch = epochs[tempCurrentEpoch];
-            uint256 expiredMP = expiredStakeStorage.getExpiredMP(tempCurrentEpoch);
-            if (expiredMP > 0) {
-                totalMPRate -= expiredMP;
-                expiredStakeStorage.deleteExpiredMP(tempCurrentEpoch);
-            }
-            uint256 epochPotentialMP = totalMPRate;
-            if (tempCurrentEpoch == currentEpoch) {
-                epochPotentialMP -= currentEpochTotalExpiredMP;
-                currentEpochTotalExpiredMP = 0;
-                thisEpoch.epochReward = epochReward();
-                pendingReward += thisEpoch.epochReward;
-            }
-
-            potentialMP += epochPotentialMP;
-            thisEpoch.potentialMP = epochPotentialMP;
-            thisEpoch.totalSupply = totalSupply();
-            tempCurrentEpoch++;
-        }
-        currentEpoch = tempCurrentEpoch;
-    }
-
-    constructor(address _REWARD_TOKEN, address _previousManager) {
-        startTime = (_previousManager == address(0)) ? block.timestamp : StakeManager(_previousManager).startTime();
-        previousManager = StakeManager(_previousManager);
-        REWARD_TOKEN = IERC20(_REWARD_TOKEN);
-        STAKING_TOKEN = IERC20(_REWARD_TOKEN);
-        if (address(previousManager) != address(0)) {
-            expiredStakeStorage = previousManager.expiredStakeStorage();
-        } else {
-            expiredStakeStorage = new ExpiredStakeStorage();
-        }
-    }
-
-    /**
-     * Increases balance of msg.sender;
+     * @notice Increases balance of msg.sender;
      * @param _amount Amount of balance being staked.
      * @param _seconds Seconds of lockup time. 0 means no lockup.
      *
      * @dev Reverts when resulting locked time is not in range of [MIN_LOCKUP_PERIOD, MAX_LOCKUP_PERIOD]
-     * @dev Reverts when account has already staked funds.
      * @dev Reverts when amount staked results in less than 1 MP per epoch.
      */
     function stake(uint256 _amount, uint256 _seconds) external onlyTrustedCodehash noPendingMigration {
-        finalizeEpoch(newEpoch());
-        if (accounts[msg.sender].balance > 0) {
-            revert StakeManager__AlreadyStaked();
-        }
-        if (_seconds != 0 && (_seconds < MIN_LOCKUP_PERIOD || _seconds > MAX_LOCKUP_PERIOD)) {
-            revert StakeManager__InvalidLockTime();
-        }
-        if (_amount < MIN_BALANCE) {
-            revert StakeManager__StakeIsTooLow();
-        }
-
-        uint256 deltaTotalMP = _calculateInitialMP(_amount) + _calculateBonusMP(_amount, _seconds);
-        uint256 deltaMaxMP = _calculateMaxMP(_amount, _seconds);
-
-        // account initialization
-        accounts[msg.sender] = Account({
-            rewardAddress: StakeVault(msg.sender).owner(),
-            balance: _amount,
-            maxMP: deltaMaxMP,
-            totalMP: deltaTotalMP,
-            lastMint: block.timestamp,
-            lockUntil: block.timestamp + _seconds,
-            epoch: currentEpoch,
-            startEpoch: currentEpoch
-        });
-
-        (uint256 mpRate, uint256 mpFractional, uint256 epochTarget1, uint256 epochTarget2, uint256 mpRemainder) =
-            _calculateMPPrediction(_amount, currentEpoch, getEpochStartTime(currentEpoch + 1) - block.timestamp);
-
-        //update global storage
-        totalMP += deltaTotalMP;
-        totalStaked += _amount;
-        if (mpRemainder > 0) {
-            expiredStakeStorage.incrementExpiredMP(epochTarget1, mpRemainder);
-            expiredStakeStorage.incrementExpiredMP(epochTarget2, mpRate - mpRemainder);
+        _finalizeEpoch(newEpoch());
+        Account storage account = accounts[msg.sender];
+        if (account.lastMint == 0) {
+            account.lastMint = block.timestamp;
+            account.epoch = currentEpoch;
+            account.rewardAddress = StakeVault(msg.sender).owner();
         } else {
-            expiredStakeStorage.incrementExpiredMP(epochTarget1, mpRate);
+            _processAccount(account, currentEpoch);
         }
-        currentEpochTotalExpiredMP += mpFractional;
-        totalMPRate += mpRate;
+
+        (uint256 _deltaMpTotal, uint256 _newMaxMP, uint256 _newLockEnd) =
+            _calculateStake(account.balance, account.maxMP, account.lockUntil, block.timestamp, _amount, _seconds);
+
+        account.maxMP = _newMaxMP;
+        account.balance += _amount;
+        account.lockUntil = _newLockEnd;
+        account.totalMP += _deltaMpTotal;
+        totalMP += _deltaMpTotal;
+        totalStaked += _amount;
+        if (account.startTime > 0) {
+            _reducePredictiedMP(account.startTime, account.balance);
+            if (_amount > 0) {
+                account.startTime = _calculateNewStartTime(account.balance, account.totalMP, _newMaxMP, block.timestamp);
+            }
+        } else {
+            account.startTime = block.timestamp;
+        }
+        _increasePredictedMP(account.startTime, account.balance, account.maxMP, account.totalMP);
     }
 
     /**
-     * leaves the staking pool and withdraws all funds;
+     * @notice Unstakes a certain `_amount`.
+     * @param _amount Amount to unstake.
+     * @dev Reverts when remaining amount staked results in less than 1 MP per epoch.
+     * @dev Reverts when trying to unstake locked account
      */
     function unstake(uint256 _amount)
         external
@@ -200,16 +114,13 @@ contract StakeManager is StakeMath, EpochMath, TrustedCodehashAccess, IStakeMana
         onlyAccountInitialized(msg.sender)
         noPendingMigration
     {
-        finalizeEpoch(newEpoch());
+        _finalizeEpoch(newEpoch());
         Account storage account = accounts[msg.sender];
         if (_amount > account.balance) {
             revert StakeManager__InsufficientFunds();
         }
         if (account.lockUntil > block.timestamp) {
             revert StakeManager__FundsLocked();
-        }
-        if (account.startEpoch == currentEpoch) {
-            //revert StakeManager__FundsLocked();
         }
         uint256 newBalance = account.balance - _amount;
         if (newBalance > 0 && newBalance < MIN_BALANCE) {
@@ -219,50 +130,21 @@ contract StakeManager is StakeMath, EpochMath, TrustedCodehashAccess, IStakeMana
         _processAccount(account, currentEpoch);
 
         uint256 reducedTotalMP = Math.mulDiv(_amount, account.totalMP, account.balance);
-        uint256 reducedMaxMP = Math.mulDiv(_amount, account.maxMP, account.balance);
-        (uint256 mpRate,, uint256 epochTarget1, uint256 epochTarget2, uint256 mpRemainder) =
-            _calculateMPPrediction(account.balance, account.startEpoch, ACCURE_RATE);
-
-        if (mpRemainder > 0) {
-            expiredStakeStorage.decrementExpiredMP(epochTarget1, mpRemainder);
-            expiredStakeStorage.decrementExpiredMP(epochTarget2, mpRate - mpRemainder);
-
-            if (epochTarget1 < currentEpoch) {
-                totalMPRate -= mpRemainder;
-            }
-
-            if (epochTarget2 < currentEpoch) {
-                totalMPRate -= mpRate - mpRemainder;
-            }
-        } else {
-            expiredStakeStorage.decrementExpiredMP(epochTarget1, mpRate);
-            if (epochTarget1 < currentEpoch) {
-                totalMPRate -= mpRate;
-            }
-        }
-
-        //update storage
-        account.balance -= _amount;
-        account.maxMP -= reducedMaxMP;
-        account.totalMP -= reducedTotalMP;
-        if (account.balance > 0 && account.totalMP < account.maxMP) {
-            (mpRate,, epochTarget1, epochTarget2, mpRemainder) =
-                _calculateMPPrediction(account.balance, account.startEpoch, ACCURE_RATE);
-            if (mpRemainder > 0) {
-                if (currentEpoch > epochTarget1) {
-                    expiredStakeStorage.incrementExpiredMP(epochTarget1, mpRemainder);
-                }
-                if (currentEpoch > epochTarget2) {
-                    expiredStakeStorage.incrementExpiredMP(epochTarget2, mpRate - mpRemainder);
-                }
-            } else {
-                expiredStakeStorage.incrementExpiredMP(epochTarget1, mpRate);
-            }
-            totalMPRate += Math.min(mpRate, account.maxMP - account.totalMP);
-        }
 
         totalStaked -= _amount;
         totalMP -= reducedTotalMP;
+
+        _reducePredictiedMP(account.startTime, account.balance);
+        if (newBalance == 0) {
+            delete accounts[msg.sender];
+        } else {
+            account.maxMP -= Math.mulDiv(_amount, account.maxMP, account.balance);
+            account.totalMP -= reducedTotalMP;
+            account.balance = newBalance;
+            if (account.totalMP < account.maxMP) {
+                _increasePredictedMP(account.startTime, account.balance, account.maxMP, account.totalMP);
+            }
+        }
     }
 
     /**
@@ -278,7 +160,7 @@ contract StakeManager is StakeMath, EpochMath, TrustedCodehashAccess, IStakeMana
         onlyAccountInitialized(msg.sender)
         noPendingMigration
     {
-        finalizeEpoch(newEpoch());
+        _finalizeEpoch(newEpoch());
         Account storage account = accounts[msg.sender];
         _processAccount(account, currentEpoch);
         uint256 lockUntil = account.lockUntil;
@@ -297,7 +179,7 @@ contract StakeManager is StakeMath, EpochMath, TrustedCodehashAccess, IStakeMana
             revert StakeManager__InvalidLockTime();
         }
         //mints bonus multiplier points for seconds increased
-        uint256 bonusMP = _calculateAccuredMP(account.balance, _secondsIncrease);
+        uint256 bonusMP = _accruedMP(account.balance, _secondsIncrease);
 
         //update account storage
         account.lockUntil = lockUntil;
@@ -311,7 +193,7 @@ contract StakeManager is StakeMath, EpochMath, TrustedCodehashAccess, IStakeMana
      * @notice Release rewards for current epoch and increase epoch to latest epoch.
      */
     function executeEpoch() external noPendingMigration {
-        finalizeEpoch(newEpoch());
+        _finalizeEpoch(newEpoch());
     }
 
     /**
@@ -322,7 +204,7 @@ contract StakeManager is StakeMath, EpochMath, TrustedCodehashAccess, IStakeMana
         if (newEpoch() < _limitEpoch) {
             revert StakeManager__InvalidLimitEpoch();
         }
-        finalizeEpoch(_limitEpoch);
+        _finalizeEpoch(_limitEpoch);
     }
 
     /**
@@ -331,7 +213,7 @@ contract StakeManager is StakeMath, EpochMath, TrustedCodehashAccess, IStakeMana
      */
     function executeAccount(address _vault) external onlyAccountInitialized(_vault) {
         if (address(migration) == address(0)) {
-            finalizeEpoch(newEpoch());
+            _finalizeEpoch(newEpoch());
         }
         _processAccount(accounts[_vault], currentEpoch);
     }
@@ -346,7 +228,7 @@ contract StakeManager is StakeMath, EpochMath, TrustedCodehashAccess, IStakeMana
             if (newEpoch() < _limitEpoch) {
                 revert StakeManager__InvalidLimitEpoch();
             }
-            finalizeEpoch(_limitEpoch);
+            _finalizeEpoch(_limitEpoch);
         }
         _processAccount(accounts[_vault], _limitEpoch);
     }
@@ -355,52 +237,17 @@ contract StakeManager is StakeMath, EpochMath, TrustedCodehashAccess, IStakeMana
      * @notice starts migration to new StakeManager
      * @param _migration new StakeManager
      */
-    function startMigration(StakeManager _migration) external onlyOwner noPendingMigration {
-        finalizeEpoch(newEpoch());
-        if (_migration == this || address(_migration) == address(0)) {
+    function startMigration(IStakeManagerUpdated _migration) external onlyOwner noPendingMigration {
+        _finalizeEpoch(newEpoch());
+        if (address(_migration) == address(this) || address(_migration) == address(0)) {
             revert StakeManager__InvalidMigration();
         }
         migration = _migration;
         REWARD_TOKEN.transfer(address(migration), epochReward());
-        expiredStakeStorage.transferOwnership(address(_migration));
+        EXPIRED_STAKE_STORAGE.transferOwnership(address(_migration));
         migration.migrationInitialize(
-            currentEpoch, totalMP, totalStaked, startTime, totalMPRate, potentialMP, currentEpochTotalExpiredMP
+            currentEpoch, totalMP, totalStaked, START_TIME, totalMPRate, potentialMP, currentEpochTotalExpiredMP
         );
-    }
-
-    /**
-     * @dev Callable automatically from old StakeManager.startMigration(address)
-     * @notice Initilizes migration process
-     * @param _currentEpoch epoch of old manager
-     * @param _totalMP MP supply on old manager
-     * @param _totalStaked stake supply on old manager
-     * @param _startTime start time of old manager
-     */
-    function migrationInitialize(
-        uint256 _currentEpoch,
-        uint256 _totalMP,
-        uint256 _totalStaked,
-        uint256 _startTime,
-        uint256 _totalMPRate,
-        uint256 _potentialMP,
-        uint256 _currentEpochExpiredMP
-    )
-        external
-        onlyPreviousManager
-        noPendingMigration
-    {
-        if (currentEpoch > 0) {
-            revert StakeManager__AlreadyProcessedEpochs();
-        }
-        if (_startTime != startTime) {
-            revert StakeManager__InvalidMigration();
-        }
-        currentEpoch = _currentEpoch;
-        totalMP = _totalMP;
-        totalStaked = _totalStaked;
-        totalMPRate = _totalMPRate;
-        potentialMP = _potentialMP;
-        currentEpochTotalExpiredMP = _currentEpochExpiredMP;
     }
 
     /**
@@ -419,7 +266,7 @@ contract StakeManager is StakeMath, EpochMath, TrustedCodehashAccess, IStakeMana
         onlyTrustedCodehash
         onlyAccountInitialized(msg.sender)
         onlyPendingMigration
-        returns (StakeManager newManager)
+        returns (IStakeManagerUpdated newManager)
     {
         _processAccount(accounts[msg.sender], currentEpoch);
         Account memory account = accounts[msg.sender];
@@ -434,7 +281,7 @@ contract StakeManager is StakeMath, EpochMath, TrustedCodehashAccess, IStakeMana
      * @notice Account accepts an update to new contract
      * @return _migrated new manager
      */
-    function acceptUpdate() external returns (IStakeManager _migrated) {
+    function acceptUpdate() external returns (IStakeManagerUpdated _migrated) {
         return migrateTo(true);
     }
 
@@ -445,31 +292,6 @@ contract StakeManager is StakeMath, EpochMath, TrustedCodehashAccess, IStakeMana
     function leave() external returns (bool _leaveAccepted) {
         migrateTo(false);
         return true;
-    }
-
-    /**
-     * @dev Only callable from old manager.
-     * @notice Migrate account from old manager
-     * @param _vault Account address
-     * @param _account Account data
-     * @param _acceptMigration If account should be stored or its MP/balance supply reduced
-     */
-    function migrateFrom(address _vault, bool _acceptMigration, Account memory _account) external onlyPreviousManager {
-        if (_acceptMigration) {
-            accounts[_vault] = _account;
-        } else {
-            totalMP -= _account.totalMP;
-            totalStaked -= _account.balance;
-        }
-    }
-
-    /**
-     * @dev Only callable from old manager.
-     * @notice Increase total MP from old manager
-     * @param _amount amount MP increased on account after migration initialized
-     */
-    function increaseTotalMP(uint256 _amount) external onlyPreviousManager {
-        totalMP += _amount;
     }
 
     /**
@@ -487,7 +309,7 @@ contract StakeManager is StakeMath, EpochMath, TrustedCodehashAccess, IStakeMana
         while (userEpoch < _limitEpoch) {
             Epoch storage iEpoch = epochs[userEpoch];
             //mint multiplier points to that epoch
-            _mintMP(account, startTime + (ACCURE_RATE * (userEpoch + 1)), iEpoch);
+            _mintMP(account, getEpochStartTime(userEpoch + 1), iEpoch);
             uint256 userSupply = account.balance + account.totalMP;
             uint256 userEpochReward = Math.mulDiv(userSupply, iEpoch.epochReward, iEpoch.totalSupply);
             userReward += userEpochReward;
@@ -517,7 +339,7 @@ contract StakeManager is StakeMath, EpochMath, TrustedCodehashAccess, IStakeMana
      * @param epoch Epoch to increment total supply
      */
     function _mintMP(Account storage account, uint256 processTime, Epoch storage epoch) private {
-        uint256 accruedMP = _calculateAccuredMP(account.balance, processTime - account.lastMint);
+        uint256 accruedMP = _accruedMP(account.balance, processTime - account.lastMint);
         if (accruedMP + account.totalMP > account.maxMP) {
             accruedMP = account.maxMP - account.totalMP; //how much left to reach cap
         }
@@ -540,14 +362,14 @@ contract StakeManager is StakeMath, EpochMath, TrustedCodehashAccess, IStakeMana
         return accounts[_vault].balance;
     }
 
-    /*
+    /**
      * @notice Calculates multiplier points to mint for given balance and time
      * @param _balance balance of account
      * @param _deltaTime time difference
-     * @return multiplier points to mint
+     * @return mp multiplier points to mint
      */
-    function calculateMP(uint256 _balance, uint256 _deltaTime) public pure returns (uint256) {
-        return _calculateAccuredMP(_balance, _deltaTime);
+    function calculateMP(uint256 _balance, uint256 _deltaTime) public pure returns (uint256 mp) {
+        return _accruedMP(_balance, _deltaTime);
     }
 
     /**
@@ -555,7 +377,7 @@ contract StakeManager is StakeMath, EpochMath, TrustedCodehashAccess, IStakeMana
      * and the pending MPs that would be minted if all accounts were processed
      * @return _totalSupply current total supply
      */
-    function totalSupply() public view returns (uint256 _totalSupply) {
+    function totalSupply() public view override returns (uint256 _totalSupply) {
         return totalMP + totalStaked + potentialMP;
     }
 
@@ -571,19 +393,7 @@ contract StakeManager is StakeMath, EpochMath, TrustedCodehashAccess, IStakeMana
      * @notice Returns funds available for current epoch
      * @return _epochReward current epoch reward
      */
-    function epochReward() public view returns (uint256 _epochReward) {
+    function epochReward() public view override returns (uint256 _epochReward) {
         return REWARD_TOKEN.balanceOf(address(this)) - pendingReward;
-    }
-
-    function getEpochStartTime(uint256 _epochNum) public view override returns (uint256 _epochEnd) {
-        return startTime + (ACCURE_RATE * (_epochNum));
-    }
-
-    /**
-     * @notice Returns the last epoch that can be processed on current time
-     * @return _newEpoch the number of the epoch after all epochs that can be processed
-     */
-    function newEpoch() public view returns (uint256 _newEpoch) {
-        _newEpoch = (block.timestamp - startTime) / ACCURE_RATE;
     }
 }

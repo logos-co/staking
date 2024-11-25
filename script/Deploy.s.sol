@@ -12,7 +12,7 @@ contract Deploy is BaseScript {
         (, address token) = deploymentConfig.activeNetworkConfig();
 
         vm.startBroadcast(broadcaster);
-        StakeManager stakeManager = new StakeManager(token, address(0));
+        StakeManager stakeManager = new StakeManager(token);
         VaultFactory vaultFactory = new VaultFactory(address(stakeManager));
         vm.stopBroadcast();
 

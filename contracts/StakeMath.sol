@@ -5,6 +5,12 @@ import { Math } from "@openzeppelin/contracts/utils/math/Math.sol";
 import { MultiplierPointMath } from "./MultiplierPointMath.sol";
 
 abstract contract StakeMath is MultiplierPointMath {
+    error StakeManager__FundsLocked();
+    error StakeManager__InvalidLockTime();
+    error StakeManager__StakeIsTooLow();
+    error StakeManager__InsufficientFunds();
+    error StakeManager__AccrueTimeNotReached();
+
     /// @notice Minimal lockup time
     uint256 public constant MIN_LOCKUP_PERIOD = 1 weeks;
     /// @notice Maximum lockup period
@@ -14,8 +20,8 @@ abstract contract StakeMath is MultiplierPointMath {
      * @notice Calculates the bonus multiplier points earned when a balance Δa is increased an optionally locked for a
      * specified duration
      * @param _balance Account current balance
-     * @param _maxMP Account current max multiplier points
-     * @param _lockEndTime Account current lock end timestamp
+     * @param _currentMaxMP Account current max multiplier points
+     * @param _currentLockEndTime Account current lock end timestamp
      * @param _processTime Process current timestamp
      * @param _increasedAmount Increased amount of balance
      * @param _increasedLockSeconds Increased amount of seconds to lock
@@ -25,8 +31,8 @@ abstract contract StakeMath is MultiplierPointMath {
      */
     function _calculateStake(
         uint256 _balance,
-        uint256 _maxMP,
-        uint256 _lockEndTime,
+        uint256 _currentMaxMP,
+        uint256 _currentLockEndTime,
         uint256 _processTime,
         uint256 _increasedAmount,
         uint256 _increasedLockSeconds
@@ -36,23 +42,26 @@ abstract contract StakeMath is MultiplierPointMath {
         returns (uint256 _deltaMpTotal, uint256 _newMaxMP, uint256 _newLockEnd)
     {
         uint256 newBalance = _balance + _increasedAmount;
-        require(newBalance >= MIN_BALANCE, "StakeMath: balance too low");
-        _newLockEnd = Math.max(_lockEndTime, _processTime) + _increasedLockSeconds;
+        if (newBalance < MIN_BALANCE) {
+            revert StakeManager__StakeIsTooLow();
+        }
+        _newLockEnd = Math.max(_currentLockEndTime, _processTime) + _increasedLockSeconds;
         uint256 dt_lock = _newLockEnd - _processTime;
-        require(dt_lock == 0 || dt_lock >= MIN_LOCKUP_PERIOD, "StakeMath: lockup time too low");
-        require(dt_lock <= MAX_LOCKUP_PERIOD, "StakeMath: lockup time too high");
+        if (dt_lock != 0 && (dt_lock < MIN_LOCKUP_PERIOD || dt_lock > MAX_LOCKUP_PERIOD)) {
+            revert StakeManager__InvalidLockTime();
+        }
 
         uint256 deltaMpBonus;
         if (dt_lock > 0) {
-            deltaMpBonus = _calculateBonusMP(_increasedAmount, dt_lock);
+            deltaMpBonus = _bonusMP(_increasedAmount, dt_lock);
         }
 
         if (_balance > 0 && _increasedLockSeconds > 0) {
-            deltaMpBonus += _calculateBonusMP(_balance, _increasedLockSeconds);
+            deltaMpBonus += _bonusMP(_balance, _increasedLockSeconds);
         }
 
-        _deltaMpTotal = _calculateInitialMP(_increasedAmount) + deltaMpBonus;
-        _newMaxMP = _maxMP + _deltaMpTotal + _calculateAccuredMP(_balance, MAX_MULTIPLIER * YEAR);
+        _deltaMpTotal = _initialMP(_increasedAmount) + deltaMpBonus;
+        _newMaxMP = _currentMaxMP + _deltaMpTotal + _accruedMP(_increasedAmount, MAX_MULTIPLIER * YEAR);
 
         require(_newMaxMP <= MP_MPY_ABSOLUTE * (_balance + _increasedAmount), "StakeMath: max multiplier exceeded");
     }
@@ -60,8 +69,8 @@ abstract contract StakeMath is MultiplierPointMath {
     /**
      * @notice Calculates the bonus multiplier points earned when a balance Δa is locked for a specified duration
      * @param _balance Account current balance
-     * @param _maxMP Account current max multiplier points
-     * @param _lockEndTime Account current lock end timestamp
+     * @param _currentMaxMP Account current max multiplier points
+     * @param _currentLockEndTime Account current lock end timestamp
      * @param _processTime Process current timestamp
      * @param _increasedLockSeconds Increased amount of seconds to lock
      * @return _deltaMpTotal Increased amount of total multiplier points
@@ -70,8 +79,8 @@ abstract contract StakeMath is MultiplierPointMath {
      */
     function calculateLock(
         uint256 _balance,
-        uint256 _maxMP,
-        uint256 _lockEndTime,
+        uint256 _currentMaxMP,
+        uint256 _currentLockEndTime,
         uint256 _processTime,
         uint256 _increasedLockSeconds
     )
@@ -82,13 +91,14 @@ abstract contract StakeMath is MultiplierPointMath {
         require(_balance > 0);
         require(_increasedLockSeconds > 0);
 
-        _newLockEnd = Math.max(_lockEndTime, _processTime) + _increasedLockSeconds;
+        _newLockEnd = Math.max(_currentLockEndTime, _processTime) + _increasedLockSeconds;
         uint256 dt_lock = _newLockEnd - _processTime;
-        require(dt_lock == 0 || dt_lock >= MIN_LOCKUP_PERIOD, "StakeMath: lockup time too low");
-        require(dt_lock <= MAX_LOCKUP_PERIOD, "StakeMath: lockup time too high");
+        if (dt_lock != 0 && (dt_lock < MIN_LOCKUP_PERIOD || dt_lock > MAX_LOCKUP_PERIOD)) {
+            revert StakeManager__InvalidLockTime();
+        }
 
-        _deltaMpTotal += _calculateBonusMP(_balance, _increasedLockSeconds);
-        _newMaxMP = _maxMP + _deltaMpTotal;
+        _deltaMpTotal += _bonusMP(_balance, _increasedLockSeconds);
+        _newMaxMP = _currentMaxMP + _deltaMpTotal;
 
         require(_newMaxMP <= MP_MPY_ABSOLUTE * (_balance), "StakeMath: max multiplier exceeded");
     }
@@ -96,47 +106,53 @@ abstract contract StakeMath is MultiplierPointMath {
     /**
      *
      * @param _balance Account current balance
-     * @param _lockEndTime Account current lock end timestamp
+     * @param _currentLockEndTime Account current lock end timestamp
      * @param _processTime Process current timestamp
-     * @param _totalMP Account current total multiplier points
-     * @param _maxMP Account current max multiplier points
+     * @param _currentTotalMP Account current total multiplier points
+     * @param _currentMaxMP Account current max multiplier points
      * @param _reducedAmount Reduced amount of balance
      * @return _deltaMpTotal Increased amount of total multiplier points
      * @return _deltaMpMax Increased amount of max multiplier points
      */
     function _calculateUnstake(
         uint256 _balance,
-        uint256 _lockEndTime,
+        uint256 _currentLockEndTime,
         uint256 _processTime,
-        uint256 _totalMP,
-        uint256 _maxMP,
+        uint256 _currentTotalMP,
+        uint256 _currentMaxMP,
         uint256 _reducedAmount
     )
         internal
         pure
         returns (uint256 _deltaMpTotal, uint256 _deltaMpMax)
     {
-        require(_lockEndTime <= _processTime, "StakeMath: lockup not ended");
-        require(_balance >= _reducedAmount, "StakeMath: balance too low");
+        if (_reducedAmount > _balance) {
+            revert StakeManager__InsufficientFunds();
+        }
+        if (_currentLockEndTime > _processTime) {
+            revert StakeManager__FundsLocked();
+        }
         uint256 newBalance = _balance - _reducedAmount;
-        require(newBalance == 0 || newBalance >= MIN_BALANCE, "StakeMath: balance too low");
-        _deltaMpTotal = _calculateReducedMP(_totalMP, _balance, _reducedAmount);
-        _deltaMpMax = _calculateReducedMP(_maxMP, _balance, _reducedAmount);
+        if (newBalance < MIN_BALANCE) {
+            revert StakeManager__StakeIsTooLow();
+        }
+        _deltaMpTotal = _reducedMP(_currentTotalMP, _balance, _reducedAmount);
+        _deltaMpMax = _reducedMP(_currentMaxMP, _balance, _reducedAmount);
     }
 
     /**
      * @notice Calculates the accrued multiplier points for a given balance and seconds passed since last accrual
      * @param _balance Account current balance
-     * @param _totalMP Account current total multiplier points
-     * @param _maxMP Account current max multiplier points
+     * @param _currentTotalMP Account current total multiplier points
+     * @param _currentMaxMP Account current max multiplier points
      * @param _lastAccrualTime Account current last accrual timestamp
      * @param _processTime Process current timestamp
      * @return _deltaMpTotal Increased amount of total multiplier points
      */
     function _calculateAccrual(
         uint256 _balance,
-        uint256 _totalMP,
-        uint256 _maxMP,
+        uint256 _currentTotalMP,
+        uint256 _currentMaxMP,
         uint256 _lastAccrualTime,
         uint256 _processTime
     )
@@ -145,9 +161,11 @@ abstract contract StakeMath is MultiplierPointMath {
         returns (uint256 _deltaMpTotal)
     {
         uint256 dt = _processTime - _lastAccrualTime;
-        require(dt >= ACCURE_RATE, "StakeMath: no enough time passed");
-        if (_totalMP <= _maxMP) {
-            _deltaMpTotal = Math.min(_calculateAccuredMP(_balance, dt), _maxMP - _totalMP);
+        if (dt < ACCURE_RATE) {
+            revert StakeManager__AccrueTimeNotReached();
+        }
+        if (_currentTotalMP < _currentMaxMP) {
+            _deltaMpTotal = Math.min(_accruedMP(_balance, dt), _currentMaxMP - _currentTotalMP);
         }
     }
 
@@ -155,10 +173,9 @@ abstract contract StakeMath is MultiplierPointMath {
      * @dev Caution: This value is estimated and can be incorrect due precision loss.
      * @notice Estimates the time an account set as locked time.
      * @param _mpMax Maximum multiplier points calculated from the current balance.
-     * @param _currentBalance Current balance used to calculate the maximum multiplier points.
+     * @param _balance Current balance used to calculate the maximum multiplier points.
      */
-    function _estimateLockTime(uint256 _mpMax, uint256 _currentBalance) internal pure returns (uint256 _lockTime) {
-        return Math.mulDiv((_mpMax - _currentBalance) * 100, YEAR, _currentBalance * MP_APY, Math.Rounding.Up)
-            - MAX_LOCKUP_PERIOD;
+    function _estimateLockTime(uint256 _mpMax, uint256 _balance) internal pure returns (uint256 _lockTime) {
+        return Math.mulDiv((_mpMax - _balance) * 100, YEAR, _balance * MP_APY, Math.Rounding.Up) - MAX_LOCKUP_PERIOD;
     }
 }

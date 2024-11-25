@@ -6,11 +6,6 @@ import { ITrustedCodehashAccess } from "./ITrustedCodehashAccess.sol";
 import { IStakeConstants } from "./IStakeConstants.sol";
 
 interface IStakeManager is IStakeConstants, ITrustedCodehashAccess {
-    error StakeManager__FundsLocked();
-    error StakeManager__InvalidLockTime();
-    error StakeManager__InsufficientFunds();
-    error StakeManager__StakeIsTooLow();
-
     function STAKING_TOKEN() external view returns (IERC20);
     function REWARD_TOKEN() external view returns (IERC20);
 
@@ -22,4 +17,15 @@ interface IStakeManager is IStakeConstants, ITrustedCodehashAccess {
     function totalMP() external view returns (uint256);
     //function totalMaxMP() external view returns (uint256);
     function getStakedBalance(address _vault) external view returns (uint256 _balance);
+
+    struct Account {
+        address rewardAddress;
+        uint256 balance;
+        uint256 maxMP;
+        uint256 totalMP;
+        uint256 lastMint;
+        uint256 lockUntil;
+        uint256 epoch;
+        uint256 startTime;
+    }
 }
